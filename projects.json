@@ -1,0 +1,36 @@
+{
+    "projects": [
+        {
+            "id": "tbo-7",
+            "name": "Контейнер ТБО-7",
+            "description": "Контейнер для твердобытовых отходов.",
+            "previewImage": "models/tbo-7/preview.png",
+            "modelFile": "models/tbo-7/model.glb",
+            "cpecFile": "models/tbo-7/cpec.csv"
+        },
+        {
+            "id": "tbo-4-k",
+            "name": "Контейнер ТБО-4-К",
+            "description": "Контейнер для твердобытовых отходов.",
+            "previewImage": "models/tbo-4-k/preview.png",
+            "modelFile": "models/tbo-4-k/model.glb",
+            "cpecFile": "models/tbo-4-k/cpec.csv"
+        },
+        {
+            "id": "tbo-6-k",
+            "name": "Контейнер ТБО-6-К",
+            "description": "Контейнер для твердобытовых отходов.",
+            "previewImage": "models/tbo-6-k/preview.png",
+            "modelFile": "models/tbo-6-k/model.glb",
+            "cpecFile": "models/tbo-6-k/cpec.csv"
+        },
+        {
+            "id": "tbo-8-k",
+            "name": "Контейнер ТБО-8-К",
+            "description": "Контейнер для твердобытовых отходов.",
+            "previewImage": "models/tbo-8-k/preview.png",
+            "modelFile": "models/tbo-8-k/model.glb",
+            "cpecFile": "models/tbo-8-k/cpec.csv"
+        }
+    ]
+}

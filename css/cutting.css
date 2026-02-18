@@ -1,0 +1,381 @@
+/* Стили для вкладки раскроя */
+.cutting-full {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.cutting-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    flex: 1;
+}
+
+.cutting-section {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    border: 1px solid #dee2e6;
+}
+
+.cutting-section h4 {
+    margin-top: 0;
+    color: #495057;
+    border-bottom: 2px solid #00ff00;
+    padding-bottom: 8px;
+}
+
+.cutting-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+.cutting-list li {
+    padding: 8px 0;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.cutting-list li:last-child {
+    border-bottom: none;
+}
+
+/* Стили для вкладки раскроя */
+.cutting-tab {
+    overflow-y: auto;
+}
+
+.cutting-full {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.cutting-controls {
+    background: var(--card-background);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.cutting-controls h2 {
+    margin-top: 0;
+    color: #007bff;
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 1.5rem;
+}
+
+.controls-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); /* Равные колонки */
+    gap: 15px; /* Уменьшенный gap для мобильных */
+    margin-bottom: 20px;
+    align-items: end; /* Выравнивание по нижнему краю */
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0; /* Для предотвращения переполнения */
+}
+
+.control-group label {
+    font-weight: 500;
+    color: var(--text-color);
+    font-size: 14px;
+    margin-bottom: 5px;
+    white-space: nowrap; /* Текст в одну строку */
+    overflow: hidden;
+    text-overflow: ellipsis; /* Троеточие если не помещается */
+}
+
+/* Унифицируем размеры полей ввода */
+.control-group input,
+.control-group select {
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: white;
+    width: 100%;
+    box-sizing: border-box; /* Учитываем padding в ширине */
+    height: 40px; /* Фиксированная высота */
+    min-width: 0; /* Для предотвращения переполнения */
+}
+
+.control-group input:focus,
+.control-group select:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, .25);
+}
+
+/* Для выпадающего списка */
+.control-group select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23333' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center; /* Уменьшен отступ для мобильных */
+    background-size: 12px; /* Уменьшен размер иконки */
+    padding-right: 30px; /* Уменьшен padding для мобильных */
+}
+
+/* Для числового поля */
+.control-group input[type="number"] {
+    -moz-appearance: textfield; /* Убираем стрелки в Firefox */
+}
+
+.control-group input[type="number"]::-webkit-outer-spin-button,
+.control-group input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.cut-btn {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 12px 20px; /* Уменьшен padding для мобильных */
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    max-width: 200px;
+    margin: 0 auto;
+    display: block;
+    height: 44px; /* Сходная высота с полями ввода */
+}
+
+.cut-btn:hover {
+    background-color: #0056b3;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.cut-btn:active {
+    transform: translateY(0);
+}
+
+.cutting-results {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Материал секция */
+.material-section {
+    background: var(--card-background);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    padding: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.material-section h2 {
+    margin-top: 0;
+    color: var(--text-color);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    font-size: 1.3rem;
+}
+
+/* Раскрой план */
+.cutting-plan-item {
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background-color: var(--card-background);
+}
+
+.cutting-plan-item h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.material-summary h4, p {
+    margin-bottom: 4px;
+}
+
+/* Визуализация заготовки */
+.stock-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.stock {
+    width: 100%;
+    height: 40px;
+    display: flex;
+    border: 2px solid #343a40;
+    border-radius: 4px;
+    overflow: hidden;
+    background-color: #e9ecef;
+}
+
+.part {
+    height: 100%;
+    background-color: #28a745;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+    box-sizing: border-box;
+    transition: all 0.2s;
+}
+
+.part:hover {
+    opacity: 0.9;
+    transform: scale(1.02);
+}
+
+.cut-visual {
+    height: 100%;
+    background-color: #343a40;
+    min-width: 2px;
+}
+
+.waste {
+    height: 100%;
+    background-color: #dc3545;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0);
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.waste-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-align: right;
+    margin-top: 0;
+    margin-bottom: 0;
+    font-style: italic;
+}
+
+/* Сводка */
+.summary {
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 10px;
+    margin-top: 10px;
+}
+
+.summary h3,
+.summary h4 {
+    margin-top: 0;
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+}
+
+.summary p {
+    margin: 4px 0;
+    font-size: 14px;
+}
+
+.summary strong {
+    color: var(--text-secondary);
+}
+
+/* Адаптивность для вкладки раскроя - сохраняем горизонтальное расположение */
+@media (max-width: 768px) {
+    .cutting-full {
+        padding: 8px; /* Уменьшенный padding */
+    }
+
+    .cutting-controls {
+        padding: 10px;
+    }
+
+    .controls-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr)); /* Форсируем равные колонки */
+        gap: 8px; /* Еще меньше gap */
+    }
+
+    .control-group label {
+        font-size: 12px; /* Уменьшенный размер шрифта */
+    }
+
+    .control-group input,
+    .control-group select {
+        padding: 8px 10px; /* Уменьшенный padding */
+        font-size: 13px; /* Уменьшенный размер шрифта */
+        height: 36px; /* Уменьшенная высота */
+    }
+
+    .control-group select {
+        background-position: right 6px center; /* Еще ближе иконка */
+        padding-right: 24px;
+        background-size: 10px;
+    }
+
+    .cut-btn {
+        padding: 10px 16px;
+        font-size: 14px;
+        height: 40px;
+        max-width: 180px;
+    }
+
+    .material-section {
+        padding: 8px;
+    }
+
+    .stock {
+        height: 30px;
+    }
+
+    .part,
+    .waste {
+        font-size: 10px;
+    }
+}
+
+/* Для очень маленьких экранов */
+@media (max-width: 480px) {
+    .controls-grid {
+        gap: 6px; /* Минимальный gap */
+    }
+
+    .control-group label {
+        font-size: 12px;
+    }
+
+    .control-group input,
+    .control-group select {
+        padding: 6px 8px;
+        font-size: 14px;
+        height: 34px;
+    }
+
+    .cutting-controls h2 {
+        font-size: 1.2rem;
+        margin-bottom: 15px;
+    }
+
+    .cut-btn {
+        padding: 8px 12px;
+        font-size: 13px;
+        height: 38px;
+        max-width: 160px;
+    }
+}

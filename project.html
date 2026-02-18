@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Model Viewer</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+
+    <!-- Основной контейнер -->
+    <div class="project-container">
+
+        <div class="control-buttons">
+            <!-- Кнопка возврата -->
+            <a href="index.html" class="back-button">
+                <i class="fa-solid fa-house"></i>
+                <span>Назад</span>
+            </a>
+
+            <!-- Правая группа кнопок -->
+            <div class="button-group">
+                <!-- Кнопка переключения 3D/2D -->
+                <a href="#" id="toggle-3d-2d-btn" class="toggle-3d-2d-button">
+                    <i class="fas fa-image"></i>
+                    <span>3D</span>
+                </a>
+
+                <!-- Кнопка развертывания -->
+                <a href="#" id="toggle-fullscreen-btn" class="expand-button">
+                    <i class="fas fa-expand"></i>
+                    <span>Во весь экран</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Контейнер для 3D модели (по умолчанию активен) -->
+        <div class="model-container active" id="model-container">
+            <canvas id="viewer"></canvas>
+        </div>
+
+        <!-- Контейнер для 2D чертежей (по умолчанию скрыт) -->
+        <div class="drawing-container" id="drawing-container">
+            <div class="drawing-wrapper">
+                <img id="drawing-image" class="drawing-image no-save" alt="Чертеж детали">
+                <div class="drawing-placeholder" id="drawing-placeholder">
+                    <i class="fas fa-cube"></i>
+                    <p>Выберите деталь в таблице для просмотра чертежа</p>
+                </div>
+            </div>
+
+            <div class="drawing-controls">
+                 <!-- Кнопки навигации по чертежам будут добавляться сюда динамически -->
+            </div>
+        </div>
+
+        <!-- Резиновый разделитель контейнеров для 3D/2D -->
+        <div class="resize-handle" id="resize-handle">
+            <div class="resize-handle-line"></div>
+            <!-- ЗАМЕНЯЕМ dots на кнопку -->
+            <button id="view-toggle-btn" class="view-toggle-button" title="Переключить между спецификацией и раскроем"
+                aria-label="Переключить между спецификацией и раскроем">
+                <i class="fas fa-cut"></i>
+            </button>
+        </div>
+
+        <!-- Панель информации -->
+        <div class="info-panel">
+
+            <div class="tab-content">
+                <!-- Вкладка спецификации -->
+                <div class="tab-pane active" id="specification">
+                    <table class="spec-table">
+                        <thead>
+                            <tr>
+                                <th>Обозначение</th>
+                                <th>Наименование</th>
+                                <th>Кол</th>
+                            </tr>
+                        </thead>
+                        <tbody id="specification-body"></tbody>
+                    </table>
+                </div>
+
+                <!-- Вкладка Раскрой -->
+                <div id="cutting" class="tab-pane">
+                    <div class="cutting-full">
+                        <div class="cutting-controls">
+
+                            <div class="controls-grid">
+                                <div class="control-group">
+                                    <label for="stockLengthSelect">Длина заготовки:</label>
+                                    <select id="stockLengthSelect">
+                                        <option value="6000" selected>6000 мм</option>
+                                        <option value="12000">12000 мм</option>
+                                    </select>
+                                </div>
+                                <div class="control-group">
+                                    <label for="kerfSelect">Ширина реза:</label>
+                                    <select id="kerfSelect">
+                                        <option value="0" selected>0 мм</option>
+                                        <option value="1" selected>1 мм</option>
+                                        <option value="1.6">1.6 мм</option>
+                                        <option value="2">2 мм</option>
+                                        <option value="3">3 мм</option>
+                                    </select>
+                                </div>
+                                <div class="control-group">
+                                    <label for="multiplicity">Кратность:</label>
+                                    <input type="number" id="multiplicity" value="1" min="1">
+                                </div>
+                            </div>
+
+                            <button id="cutButton" class="cut-btn">Раскроить</button>
+                        </div>
+
+                        <div id="results-container" class="cutting-results">
+                            <!-- Результаты раскроя будут вставлены сюда -->
+                        </div>
+                        <div id="summary-container" class="summary" style="display: none;">
+                            <!-- Общая сводная информация будет здесь -->
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Контейнер для данных проекта -->
+    <div id="project-data" style="display: none;"></div>
+
+    <!-- Three.js библиотеки -->
+    <script src="js/three.js/three.min.js"></script>
+    <script src="js/three.js/OrbitControls.js"></script>
+    <script src="js/three.js/GLTFLoader.js"></script>
+
+    <!-- Основные скрипты -->
+    <script src="js/dataService.js" type="module"></script>
+    <script src="js/project.js" type="module"></script>
+
+    <script src="js/3d-viewer/model.js" type="module"></script>
+    <script src="js/2d-viewer/drawing-viewer.js" type="module"></script>
+
+    <script src="js/fullscreen-manager.js" type="module"></script>
+    <script src="js/resize-handler.js" type="module"></script>
+
+    <script src="js/cutting.js"></script>
+</body>
+
+</html>

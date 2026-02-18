@@ -1,0 +1,231 @@
+/* ====================== ПАНЕЛЬ СЕЧЕНИЯ ====================== */
+.cutting-panel-wrapper {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+}
+
+/* Кнопка включения (всегда на одном месте) */
+.cutting-toggle {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--button-color);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--text-color);
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 0px 10px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    z-index: 2;
+    rotate: 90deg;
+}
+
+.cutting-toggle:hover {
+    background: var(--button-color);
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+}
+
+.cutting-toggle.active {
+    background: rgba(255, 68, 68, 0.3);
+    border-color: rgba(255, 68, 68, 0.5);
+    color: #ff8888;
+}
+
+/* Панель с элементами управления (выезжает слева от кнопки) */
+.cutting-panel {
+    position: absolute;
+    right: 58px; /* Расстояние от кнопки (48px + отступ) */
+    background: var(--button-color);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 48px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    pointer-events: auto;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    transform: translateX(20px);
+    visibility: hidden;
+    z-index: 1;
+}
+
+/* Развернутое состояние панели */
+.cutting-panel.expanded {
+    opacity: 1;
+    transform: translateX(0);
+    visibility: visible;
+}
+
+/* Кнопки осей */
+.cutting-axes {
+    display: flex;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 2px;
+    gap: 2px;
+    border-radius: 40px;
+}
+
+.cutting-axis-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    font-weight: 500;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+}
+
+.cutting-axis-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-color);
+}
+
+.cutting-axis-btn.active {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Контейнер слайдера */
+.cutting-slider-container {
+    min-width: 100px;
+    position: relative;
+    padding: 0 4px;
+}
+
+/* Стилизация ползунка */
+.cutting-slider {
+    width: 100%;
+    height: 4px;
+    -webkit-appearance: none;
+    background: linear-gradient(to right, rgba(76, 175, 80, 0.8), rgba(255, 68, 68, 0.8));
+    border-radius: 10px;
+    outline: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cutting-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    transition: all 0.1s;
+}
+
+.cutting-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+    background: #f0f0f0;
+}
+
+.cutting-slider::-webkit-slider-thumb:active {
+    transform: scale(0.95);
+}
+
+.cutting-slider:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.cutting-slider:disabled::-webkit-slider-thumb {
+    cursor: not-allowed;
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: none;
+}
+
+/* Кнопки действий */
+.cutting-actions {
+    display: flex;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 40px;
+    padding: 2px;
+    gap: 2px;
+}
+
+.cutting-invert-btn,
+.cutting-reset-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+}
+
+
+.cutting-invert-btn.active {
+    background: rgba(76, 175, 80, 0.25);
+    color: var(--text-color);
+    border-color: rgba(76, 175, 80, 0.4);
+}
+
+.cutting-invert-btn:disabled,
+.cutting-reset-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 768px) {
+    .cutting-panel-wrapper {
+        bottom: 15px;
+        right: 15px;
+    }
+
+    .fullscreen-active .cutting-panel-wrapper {
+        bottom: 80px;
+    }
+
+    .cutting-toggle {
+        width: 44px;
+        height: 44px;
+        font-size: 18px;
+    }
+
+    .cutting-panel {
+        right: 52px;
+        /* 44px + отступ */
+    }
+
+    .cutting-axis-btn,
+    .cutting-invert-btn,
+    .cutting-reset-btn {
+        width: 38px;
+        height: 38px;
+        font-size: 14px;
+    }
+}

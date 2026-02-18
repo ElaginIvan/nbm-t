@@ -1,0 +1,515 @@
+/* ====================== КОНТЕЙНЕРЫ ====================== */
+.project-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 710px;
+    margin: 0 auto;
+    position: relative;
+}
+
+/* ====================== 3D ВЬЮВЕР ====================== */
+#model-container {
+    flex: 1;
+    min-height: 40vh;
+    position: relative;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    background: var(--background-color);
+    transition: all 0.3s ease;
+}
+
+#model-container.disabled {
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    flex: 0 0 0 !important;
+    margin: 0 !important;
+    overflow: hidden;
+    border-radius: 0 !important;
+}
+
+#viewer {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* ====================== 2D ЧЕРТЕЖИ ====================== */
+#drawing-container {
+    flex: 1;
+    min-height: 40vh;
+    position: relative;
+    margin-bottom: var(--spacing-sm);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    background: var(--background-color);
+    transition: all 0.3s ease;
+}
+
+.drawing-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: var(--background-color);
+    overflow: auto;
+    position: relative;
+    /* Важно для предотвращения поведения браузера по умолчанию */
+    touch-action: none;
+    /* Изменяем с pan-x pan-y pinch-zoom на none */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.drawing-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: none;
+    transition: transform 0.1s ease-out;
+    cursor: grab;
+    will-change: transform;
+    /* Предотвращаем выделение изображения на мобильных */
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+}
+
+.drawing-image.dragging {
+    transition: none;
+    cursor: grabbing;
+}
+
+/* Для предотвращения выделения текста при касании */
+.drawing-container {
+    -webkit-tap-highlight-color: transparent;
+}
+
+.drawing-placeholder {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 2rem;
+}
+
+.drawing-placeholder i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: var(--border-color);
+}
+
+.drawing-placeholder p {
+    font-size: 0.9rem;
+    max-width: 300px;
+    margin: 0 auto;
+    line-height: 1.4;
+}
+
+.drawing-controls {
+    position: absolute;
+    bottom: 1.5rem;
+    right: 1rem;
+    display: flex;
+    gap: var(--spacing-sm);
+    z-index: 10;
+}
+
+.drawing-indicator{
+    color: var(--text-color);
+    font-size: 0.875rem;
+    background: var(--button-color);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 0px 10px rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+}
+
+/* Режимы отображения */
+#model-container.active,
+#drawing-container.active {
+    display: block !important;
+}
+
+#model-container:not(.active),
+#drawing-container:not(.active) {
+    display: none !important;
+}
+
+/* Улучшение для тач-устройств */
+@media (hover: none) and (pointer: coarse) {
+    .drawing-wrapper {
+        overflow: hidden;
+        /* Убираем скролл на мобильных */
+    }
+}
+
+/* ====================== ПАНЕЛЬ ИНФОРМАЦИИ ====================== */
+.info-panel {
+    flex: 0 0 auto;
+    background: var(--card-background);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+    margin-bottom: var(--spacing-lg);
+    border: 1px solid var(--border-color);
+    transition: height 0.1s ease-out;
+    /* Плавное изменение высоты */
+}
+
+/* ====================== ВКЛАДКИ ====================== */
+.tab-content {
+    padding: var(--spacing-lg);
+    height: 100%;
+    overflow-y: auto;
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+/* ====================== ТАБЛИЦА СПЕЦИФИКАЦИИ ====================== */
+.spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.spec-table th {
+    padding: var(--spacing-sm);
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--border-color);
+    background-color: var(--card-background);
+}
+
+.spec-table th:nth-child(1) {
+    width: 40%;
+}
+
+.spec-table th:nth-child(2) {
+    width: 45%;
+}
+
+.spec-table th:nth-child(3) {
+    width: 15%;
+    text-align: center;
+}
+
+.spec-table td {
+    padding: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: top;
+}
+
+.spec-table td:nth-child(3) {
+    text-align: center;
+    font-weight: 500;
+    color: var(--primary-color);
+}
+
+.spec-table tbody tr:hover {
+    background-color: rgba(100, 149, 237, 0.05);
+}
+
+.part-row {
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.part-row:hover {
+    background-color: rgba(100, 149, 237, 0.1) !important;
+}
+
+.part-row.active {
+    background-color: rgba(100, 149, 237, 0.15) !important;
+    border-left: 3px solid var(--primary-color);
+}
+
+.part-row.active td:first-child {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.part-item {
+    padding: var(--spacing-xs) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    min-height: 24px;
+}
+
+.part-icon {
+    color: var(--primary-color);
+    font-size: 0.875rem;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+
+.part-row:hover .part-item::after {
+    opacity: 0.5;
+}
+
+.part-row.active .part-item::after {
+    opacity: 1;
+    color: var(--primary-color);
+}
+
+/* ====================== Панель инструментов ====================== */
+.control-buttons {
+    position: fixed;
+    top: var(--spacing-md);
+    width: 710px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    z-index: 1000;
+    background: transparent;
+    pointer-events: none;
+    /* Пропускаем клики через панель */
+}
+
+.control-buttons .back-button,
+.control-buttons .expand-button,
+.control-buttons .toggle-3d-2d-button {
+    pointer-events: auto;
+    /* Но сами кнопки кликабельны */
+}
+
+.button-group {
+    margin-left: auto;
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+
+/* ====================== ОСНОВНЫЕ СТИЛИ КНОПОК ====================== */
+.control-buttons {
+    padding: var(--spacing-0) var(--spacing-md);
+}
+
+.back-button,
+.expand-button,
+.toggle-3d-2d-button,
+.drawing-btn {
+    background: var(--button-color);
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-radius: 30px;
+    text-decoration: none;
+    color: var(--text-color);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    box-shadow: 0 0px 10px rgba(0, 0, 0, 0.3);
+    font-weight: 500;
+    z-index: 1000;
+    transition: var(--transition);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    cursor: pointer;
+
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.expand-button span,
+.back-button span,
+.toggle-3d-2d-button span {
+    display: none !important;
+}
+
+/* ====================== АДАПТИВНОСТЬ ====================== */
+@media (max-width: 768px) {
+    .container {
+        padding: var(--spacing-lg) var(--spacing-md);
+    }
+
+    .control-buttons {
+        top: var(--spacing-sm);
+    }
+
+
+    .models-grid {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: var(--spacing-lg);
+    }
+
+    #model-container,
+    #drawing-container {
+        min-height: 40vh;
+        margin-bottom: var(--spacing-0);
+        border-radius: var(--spacing-0);
+    }
+
+    #model-container.disabled {
+        height: 64px !important;
+        min-height: 64px !important;
+        background-color: var(--secondary-color);
+    }
+
+    .info-panel {
+        min-height: 50px;
+        border-radius: var(--spacing-0);
+        margin-bottom: 0;
+        flex-shrink: 0;
+    }
+
+    .tab-content {
+        padding: var(--spacing-0);
+    }
+
+    .tab {
+        padding: var(--spacing-sm);
+    }
+}
+
+/* ====================== АДАПТИВНОСТЬ ПАНЕЛИ УПРАВЛЕНИЯ ====================== */
+@media (max-width: 768px) {
+    .control-buttons {
+        width: calc(100% - 20px) !important;
+        left: 10px !important;
+        transform: none !important;
+        padding: var(--spacing-sm) var(--spacing-sm);
+    }
+
+    .back-button,
+    .expand-button,
+    .toggle-3d-2d-button,
+    .drawing-btn {
+        padding: var(--spacing-xs) var(--spacing-md) !important;
+        font-size: 0.875rem !important;
+    }
+}
+
+/* ====================== ПОЛНЫЙ ЭКРАН ====================== */
+.fullscreen-active {
+    overflow: hidden;
+}
+
+.fullscreen-active .project-container {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.fullscreen-active .control-buttons {
+    width: calc(100% - 20px) !important;
+    left: 10px !important;
+    transform: none !important;
+    padding: var(--spacing-sm) var(--spacing-sm);
+}
+
+
+
+/* ====================== РЕЗИНОВЫЙ РАЗДЕЛИТЕЛЬ ====================== */
+.resize-handle {
+    height: 24px;
+    position: relative;
+    cursor: row-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: var(--spacing-xs) 0;
+    touch-action: none;
+    z-index: 50;
+    user-select: none;
+}
+
+.resize-handle-line {
+    height: 1px;
+    background-color: var(--border-color);
+    width: 100%;
+    pointer-events: none; /* Пропускаем события через линию к родителю */
+}
+
+/* Модель контейнер должен занимать оставшееся пространство */
+#model-container.active,
+#drawing-container.active {
+    flex: 1 1 auto;
+    /* Минимальная высота */
+    min-height: 100px;
+}
+
+/* Увеличиваем зону клика для линии на мобильных */
+@media (hover: none) and (pointer: coarse) {
+    .resize-handle-line {
+        height: 4px; /* Увеличиваем высоту для удобства касания */
+        background-color: transparent; /* Делаем невидимой, но кликабельной */
+        position: relative;
+    }
+    
+    .resize-handle-line::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 20%;
+        right: 20%;
+        height: 1px;
+        background-color: var(--border-color);
+        transform: translateY(-50%);
+    }
+}
+
+/* Стили для активного ресайза */
+.resize-handle.active .resize-handle-line {
+    background-color: var(--primary-color);
+}
+
+.resize-handle.active .resize-handle-line::after {
+    background-color: var(--primary-color);
+}
+
+.resize-handle.active .view-toggle-button {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+/* ====================== ПЕРЕКЛЮЧАТЕЛЬ ВИДА ====================== */
+
+/* Кнопка переключения */
+.view-toggle-button {
+    position: absolute;
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    padding: var(--spacing-sm) var(--spacing-sm);
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    z-index: 100; /* Увеличиваем z-index! */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 48px;
+    width: 48px;
+}
+
+/* Адаптивность для мобильных */
+@media (hover: none) and (pointer: coarse) {
+    .resize-handle {
+        height: 25px;
+    }
+    
+    .view-toggle-button {
+        padding: var(--spacing-md);
+        font-size: 1.1rem;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+    }
+}

@@ -1,0 +1,116 @@
+/* ====================== КОНТЕЙНЕРЫ ====================== */
+.container {
+    max-width: 710px;
+    margin: 0 auto;
+    padding: var(--spacing-md) var(--spacing-md);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+
+/* ====================== КАРТОЧКИ ПРОЕКТОВ ====================== */
+.models-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--spacing-md);
+    flex: 1;
+}
+
+.model-card {
+    background: var(--card-background);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    transition: var(--transition);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    border: 1px solid var(--border-color);
+}
+
+.model-card:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-color);
+}
+
+.model-preview {
+    height: 220px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.model-preview img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transition: transform var(--transition);
+}
+
+.model-card:hover .model-preview img {
+    transform: scale(1.05);
+}
+
+.model-info {
+    padding: var(--spacing-lg);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.model-info h3 {
+    font-size: 1.125rem;
+    margin-bottom: var(--spacing-sm);
+}
+
+.model-description {
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm);
+    flex: 1;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.open-model {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    transition: var(--transition);
+    width: 100%;
+    margin-top: var(--spacing-md);
+}
+
+.open-model:hover {
+    background: #3578d4;
+    transform: translateY(-2px);
+}
+
+.homeName{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+    .open-model{
+        display: none;
+    }
+
+    .model-info{
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+}
