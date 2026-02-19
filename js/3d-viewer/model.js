@@ -52,6 +52,7 @@ function init() {
 
     setupLights(scene);
     loadModel();
+    onWindowResize();
     animate();
 }
 
