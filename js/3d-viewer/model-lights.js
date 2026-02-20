@@ -1,50 +1,56 @@
-export function setupPresentationLights(scene, renderer) {
-    // Настраиваем рендерер на качественные тени
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Мягкие тени
-    renderer.shadowMap.bias = 0.0001;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping; // Киношная цветопередача
-    renderer.toneMappingExposure = 1.2;
-
-    // Убираем ambient почти полностью
-    const ambient = new THREE.AmbientLight(0x404060, 0.05);
-    scene.add(ambient);
-
-    // ГЛАВНЫЙ ИСТОЧНИК (как большой софтбокс)
-    const keyLight = new THREE.DirectionalLight(0xfff5e6, 1.8);
-    keyLight.position.set(5, 12, 10);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.width = 2048;  // Качество теней
-    keyLight.shadow.mapSize.height = 2048;
-    keyLight.shadow.bias = -0.0005;
+/**
+ * Презентационное освещение для контейнера ТБО
+ * @param {THREE.Scene} scene - Сцена
+ * @param {THREE.WebGLRenderer} renderer - Рендерер (опционально)
+ */
+export function setupPresentationLights(scene, renderer = null) {
+    // НЕ ТРОГАЕМ настройки рендерера если они не переданы
+    // или применяем только безопасные
     
-    // Настраиваем область теней так, чтобы покрыть контейнер
-    const d = 15;
-    keyLight.shadow.camera.left = -d;
-    keyLight.shadow.camera.right = d;
-    keyLight.shadow.camera.top = d;
-    keyLight.shadow.camera.bottom = -d;
-    keyLight.shadow.camera.near = 1;
-    keyLight.shadow.camera.far = 25;
-    keyLight.shadow.normalBias = 0.05; // Убираем артефакты теней
-    
+    if (renderer) {
+        // ТОЛЬКО безопасные настройки
+        try {
+            // Не включаем shadowMap если не уверены
+            // renderer.shadowMap.enabled = false; // оставляем как есть
+            
+            // Мягкий tone mapping который точно работает
+            renderer.toneMapping = THREE.ReinhardToneMapping; // Вместо ACES
+            renderer.toneMappingExposure = 1.1;
+        } catch (e) {
+            console.warn('Не удалось применить настройки рендерера', e);
+        }
+    }
+
+    // 1. Базовое заполнение (как в рабочем варианте)
+    const ambientLight = new THREE.AmbientLight(0x404060, 0.2);
+    scene.add(ambientLight);
+
+    // 2. ОСНОВНОЙ СВЕТ (Ключевой) - теплый и яркий
+    const keyLight = new THREE.DirectionalLight(0xfff0e0, 1.5);
+    keyLight.position.set(5, 15, 12);
+    // БЕЗ ТЕНЕЙ - пока не убедимся что они работают
+    // keyLight.castShadow = false;
     scene.add(keyLight);
-    
-    // Визуализация камеры теней (для отладки)
-    // scene.add(new THREE.CameraHelper(keyLight.shadow.camera));
 
-    // ЗАПОЛНЯЮЩИЙ СВЕТ (без теней, мягкий)
-    const fillLight = new THREE.DirectionalLight(0xe6f0ff, 0.6);
-    fillLight.position.set(-5, 5, 8);
+    // 3. НИЖНЯЯ ПОДСВЕТКА
+    const bottomLight = new THREE.DirectionalLight(0xaaccff, 0.3);
+    bottomLight.position.set(0, -12, 5);
+    scene.add(bottomLight);
+
+    // 4. ЗАПОЛНЯЮЩИЙ СВЕТ СПЕРЕДИ
+    const fillLight = new THREE.DirectionalLight(0xffddcc, 0.7);
+    fillLight.position.set(-15, 8, 20);
     scene.add(fillLight);
 
-    // КОНТРОВОЙ СВЕТ (сзади)
-    const backLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    backLight.position.set(0, 5, -12);
+    // 5. КОНТРОВОЙ СВЕТ СЗАДИ
+    const backLight = new THREE.DirectionalLight(0xcceeff, 0.8);
+    backLight.position.set(20, 5, -20);
     scene.add(backLight);
 
-    // НИЖНЯЯ ПОДСВЕТКА (чтобы дно не было черным)
-    const bottomLight = new THREE.PointLight(0x446688, 0.3);
-    bottomLight.position.set(0, -3, 2);
-    scene.add(bottomLight);
+    // 6. ДОПОЛНИТЕЛЬНЫЙ БОКОВОЙ
+    const sideLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    sideLight.position.set(-10, 10, -5);
+    scene.add(sideLight);
+
+    console.log('Презентационное освещение применено');
 }
