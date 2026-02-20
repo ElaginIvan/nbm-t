@@ -1,29 +1,28 @@
-/**
- * Настраивает освещение сцены
- * @param {THREE.Scene} scene - Сцена для добавления света
- */
-export function setupLights(scene) {
-    // Основное освещение
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // Увеличиваем ambient
-    scene.add(ambientLight);
-
-    // 1. Верхний свет
-    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.6);
-    directionalLight1.position.set(0, 50, 0);
-    scene.add(directionalLight1);
-
-    // 2. Нижний свет (чтобы было видно снизу)
-    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.2);
-    directionalLight2.position.set(0, -50, 0);
-    scene.add(directionalLight2);
-
-    // 3. Свет спереди-слева
-    const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.6);
-    directionalLight3.position.set(-30, 20, 30);
-    scene.add(directionalLight3);
-
-    // 4. Свет сзади-справа
-    const directionalLight4 = new THREE.DirectionalLight(0xffffff, 0.6);
-    directionalLight4.position.set(30, 10, -30);
-    scene.add(directionalLight4);
+// В функции загрузки модели, ПОСЛЕ того как модель добавлена в сцену
+function onModelLoaded(model) {
+    scene.add(model);
+    
+    // Теперь можно безопасно включить тени на модели
+    model.traverse((node) => {
+        if (node.isMesh) {
+            node.castShadow = true;
+            node.receiveShadow = true;
+        }
+    });
+    
+    // И включить тени на рендерере
+    if (renderer) {
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        
+        // И на ключевом свете
+        const keyLight = scene.children.find(c => 
+            c.isDirectionalLight && c.intensity > 1.0
+        );
+        if (keyLight) {
+            keyLight.castShadow = true;
+            keyLight.shadow.mapSize.width = 1024;
+            keyLight.shadow.mapSize.height = 1024;
+        }
+    }
 }
