@@ -706,7 +706,7 @@ export const ProjectPage = {
                         margin-top: 20px;
                         text-decoration: none;
                     ">
-                        <i class="fas fa-arrow-left"></i>
+                        <i class="fas fa-house"></i>
                         <span>Назад</span>
                     </a>
                 </div>
