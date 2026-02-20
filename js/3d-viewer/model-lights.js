@@ -39,23 +39,4 @@ export function setupLights(scene) {
     const sideLight = new THREE.DirectionalLight(0xffffff, 0.4);
     sideLight.position.set(-15, 5, 5);
     scene.add(sideLight);
-}    bottomLight.position.set(0, -12, 5);
-    scene.add(bottomLight);
-
-    // 4. ЗАПОЛНЯЮЩИЙ СВЕТ СПЕРЕДИ
-    const fillLight = new THREE.DirectionalLight(0xffddcc, 0.7);
-    fillLight.position.set(-15, 8, 20);
-    scene.add(fillLight);
-
-    // 5. КОНТРОВОЙ СВЕТ СЗАДИ
-    const backLight = new THREE.DirectionalLight(0xcceeff, 0.8);
-    backLight.position.set(20, 5, -20);
-    scene.add(backLight);
-
-    // 6. ДОПОЛНИТЕЛЬНЫЙ БОКОВОЙ
-    const sideLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    sideLight.position.set(-10, 10, -5);
-    scene.add(sideLight);
-
-    console.log('Презентационное освещение применено');
 }
