@@ -1,42 +1,29 @@
 /**
- * Настраивает освещение сцены для максимальной читаемости граней
+ * Настраивает освещение сцены
  * @param {THREE.Scene} scene - Сцена для добавления света
  */
 export function setupLights(scene) {
-    // ВАЖНО: AmbientLight убираем полностью или делаем очень слабым
-    // Он убивает контраст! Комментарим или ставим 0.1
-    // const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // <-- ЭТО БЫЛО ПЛОХО
-    const ambientLight = new THREE.AmbientLight(0x404060, 0.15); // Еле заметный холодный фон
+    // Основное освещение
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // Увеличиваем ambient
     scene.add(ambientLight);
 
-    // 1. ВЕРХНИЙ СВЕТ (Ключевой)
-    // Делаем его теплым и ярким, он будет главным
-    const topLight = new THREE.DirectionalLight(0xffeedd, 1.2); // Теплый белый
-    topLight.position.set(5, 20, 10); // Не строго сверху, а под углом
-    scene.add(topLight);
+    // 1. Верхний свет
+    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.6);
+    directionalLight1.position.set(0, 50, 0);
+    scene.add(directionalLight1);
 
-    // 2. НИЖНИЙ СВЕТ (Подсветка снизу)
-    // Делаем холодным и слабым, чтобы создать легкое свечение
-    const bottomLight = new THREE.DirectionalLight(0xaaccff, 0.25); // Холодный голубой
-    bottomLight.position.set(0, -15, 5);
-    scene.add(bottomLight);
+    // 2. Нижний свет (чтобы было видно снизу)
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.2);
+    directionalLight2.position.set(0, -50, 0);
+    scene.add(directionalLight2);
 
-    // 3. СВЕТ СПЕРЕДИ-СЛЕВА (Заполняющий)
-    // Делаем средней яркости, теплый, чтобы смягчить тени
-    const frontLight = new THREE.DirectionalLight(0xffccaa, 0.6);
-    frontLight.position.set(-20, 10, 25);
-    scene.add(frontLight);
+    // 3. Свет спереди-слева
+    const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.6);
+    directionalLight3.position.set(-30, 20, 30);
+    scene.add(directionalLight3);
 
-    // 4. СВЕТ СЗАДИ-СПРАВА (Контровой/Rim Light)
-    // САМЫЙ ВАЖНЫЙ для отделения граней от фона!
-    // Холодный и довольно яркий
-    const backLight = new THREE.DirectionalLight(0xccddff, 0.9);
-    backLight.position.set(25, 5, -25);
-    scene.add(backLight);
-    
-    // 5. ДОПОЛНИТЕЛЬНЫЙ БОКОВОЙ СВЕТ (опционально)
-    // Если нужно еще больше подчеркнуть текстуру
-    const sideLight = new THREE.DirectionalLight(0xffffff, 0.4);
-    sideLight.position.set(-15, 5, 5);
-    scene.add(sideLight);
+    // 4. Свет сзади-справа
+    const directionalLight4 = new THREE.DirectionalLight(0xffffff, 0.6);
+    directionalLight4.position.set(30, 10, -30);
+    scene.add(directionalLight4);
 }
