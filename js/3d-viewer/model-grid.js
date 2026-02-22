@@ -14,26 +14,25 @@ export function createAdaptiveGrid(scene) {
     // Создаем цветные оси
     const axisLength = size / 2;
     const axesGroup = new THREE.Group();
-    const axisWidth = 0.05; // Ширина полоски (видна сверху)
-    const axisHeight = 0.05; // Толщина полоски (вертикальная)
+    const axisWidth = 0.3; // Ширина полоски (видна сверху)
     
-    // Ось X (красная) - горизонтальная полоска, широкая по X и Y
-    const boxX = new THREE.Mesh(
-        new THREE.BoxGeometry(axisLength * 2, axisWidth, axisHeight),
-        new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: originalGridOpacity })
+    // Ось X (красная) - плоскость вытянутая по X
+    const planeX = new THREE.Mesh(
+        new THREE.PlaneGeometry(axisLength * 2, axisWidth),
+        new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: originalGridOpacity, side: THREE.DoubleSide })
     );
-    // Поворачиваем так, чтобы ширина была видна сверху (в плоскости XZ)
-    boxX.rotation.x = Math.PI / 2; // Поворачиваем вертикальную полоску в горизонтальную плоскость
-    axesGroup.add(boxX);
+    planeX.rotation.x = -Math.PI / 2; // Кладем на пол
+    // orientation: плоскость лежит, ее длина по X, ширина по Z
+    axesGroup.add(planeX);
     
-    // Ось Z (синяя) - горизонтальная полоска, широкая по Z и Y
-    const boxZ = new THREE.Mesh(
-        new THREE.BoxGeometry(axisHeight, axisWidth, axisLength * 2),
-        new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: originalGridOpacity })
+    // Ось Z (синяя) - плоскость вытянутая по Z
+    const planeZ = new THREE.Mesh(
+        new THREE.PlaneGeometry(axisWidth, axisLength * 2),
+        new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: originalGridOpacity, side: THREE.DoubleSide })
     );
-    // Поворачиваем так, чтобы ширина была видна сверху (в плоскости XZ)
-    boxZ.rotation.x = Math.PI / 2;
-    axesGroup.add(boxZ);
+    planeZ.rotation.x = -Math.PI / 2; // Кладем на пол
+    // orientation: плоскость лежит, ее длина по Z, ширина по X
+    axesGroup.add(planeZ);
     
     axesGroup.position.y = 0.01;
 
