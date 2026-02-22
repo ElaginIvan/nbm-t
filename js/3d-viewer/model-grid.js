@@ -1,4 +1,4 @@
-let originalGridOpacity = 0.5;
+let originalGridOpacity = 1;
 
 /**
  * Создает адаптивную сетку с автоматическим скрытием
