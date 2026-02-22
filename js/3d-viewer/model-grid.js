@@ -34,7 +34,7 @@ export function createAdaptiveGrid(scene) {
     // orientation: плоскость лежит, ее длина по Z, ширина по X
     axesGroup.add(planeZ);
     
-    axesGroup.position.y = 0.01;
+    axesGroup.position.y = 0.001;
 
     const gridHelper = new THREE.Group();
     gridHelper.name = 'adaptiveGrid';
