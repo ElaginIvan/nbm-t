@@ -1,40 +1,112 @@
 let originalGridOpacity = 0.5;
-let fogControl = null; // Для управления туманом
-let particles = null; // Для атмосферных частиц
 
 /**
  * Создает адаптивную сетку с автоматическим скрытием
  * @param {THREE.Scene} scene - Сцена для добавления сетки
  */
-// Добавьте эту функцию после createAdaptiveGrid, но до export функций
-function createRedNeonGrid(size, modelWidth = 3, modelLength = 2) {
-    const group = new THREE.Group();
-    
-    // Рассчитываем размер сетки под модель с запасом
-    const gridSize = Math.max(modelWidth, modelLength) * 2.5; // С запасом 2.5x от модели
-    const halfSize = gridSize / 2;
-    
-    // Основная сетка (полупрозрачная красная основа)
-    const mainGrid = new THREE.GridHelper(gridSize, 30, 0xff3333, 0x882222);
-    mainGrid.material.opacity = 0.15;
+export function createAdaptiveGrid(scene) {
+    const size = 100;
+    const divisions = 20;
+    const mainGrid = new THREE.GridHelper(size, divisions, 0x888888, 0x444444);
+    mainGrid.material.opacity = originalGridOpacity;
     mainGrid.material.transparent = true;
-    group.add(mainGrid);
+
+    // Создаем цветные оси
+    const axisLength = size / 2;
+    const axesGroup = new THREE.Group();
+    const axisWidth = 0.3; // Ширина полоски (видна сверху)
     
-    // КРАСНЫЕ ЛИНИИ (по X) - часто, чтобы было видно масштаб
-    const redMat = new THREE.LineBasicMaterial({ color: 0xff3366 });
-    for (let i = -halfSize; i <= halfSize; i += 0.3) { // Шаг 30см для детализации
-        const points = [
-            new THREE.Vector3(i, 0.01, -halfSize),
-            new THREE.Vector3(i, 0.01, halfSize)
-        ];
-        if (Math.abs(i) < 0.1) continue; // Пропускаем центр (там будет яркая ось)
-        const geo = new THREE.BufferGeometry().setFromPoints(points);
-        const line = new THREE.Line(geo, redMat);
-        group.add(line);
-    }
+    // Ось X (красная) - плоскость вытянутая по X
+    const planeX = new THREE.Mesh(
+        new THREE.PlaneGeometry(axisLength * 2, axisWidth),
+        new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: originalGridOpacity, side: THREE.DoubleSide })
+    );
+    planeX.rotation.x = -Math.PI / 2; // Кладем на пол
+    // orientation: плоскость лежит, ее длина по X, ширина по Z
+    axesGroup.add(planeX);
     
-    // СИНИЕ ЛИНИИ (по Z) - для контраста и лучшей ориентации
-    const blueMat = new THREE.LineBasicMaterial({ color: 0x3366ff });
+    // Ось Z (синяя) - плоскость вытянутая по Z
+    const planeZ = new THREE.Mesh(
+        new THREE.PlaneGeometry(axisWidth, axisLength * 2),
+        new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: originalGridOpacity, side: THREE.DoubleSide })
+    );
+    planeZ.rotation.x = -Math.PI / 2; // Кладем на пол
+    // orientation: плоскость лежит, ее длина по Z, ширина по X
+    axesGroup.add(planeZ);
+    
+    axesGroup.position.y = 0.001;
+
+    const gridHelper = new THREE.Group();
+    gridHelper.name = 'adaptiveGrid';
+    gridHelper.add(mainGrid);
+    gridHelper.add(axesGroup);
+
+    scene.add(gridHelper);
+    return gridHelper;
+}
+// Остальные функции (updateGridPosition, checkCameraOrientation) без изменений
+/**
+ * Обновляет позицию и видимость сетки в зависимости от положения камеры
+ * @param {THREE.Object3D} model - Загруженная модель
+ * @param {THREE.Group} gridHelper - Группа сетки
+ */
+export function updateGridPosition(model, gridHelper) {
+    if (!gridHelper || !model) return;
+
+    // 1. Получаем ограничивающую рамку модели
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+
+    // 2. Определяем минимальную Y-координату модели
+    const minY = box.min.y;
+
+    // 3. Помещаем сетку под модель с небольшим отступом
+    gridHelper.position.set(center.x, minY - 0.01, center.z);
+
+    // 4. Масштабируем сетку в соответствии с размером модели
+    const modelSize = Math.max(size.x, size.z);
+    const gridScale = Math.max(modelSize * 1.5, 10); // Минимальный размер 10
+    gridHelper.scale.set(gridScale / 100, 1, gridScale / 100);
+}
+
+/**
+ * Проверяет ориентацию камеры и скрывает/показывает сетку
+ * @param {THREE.Group} gridHelper - Группа сетки
+ * @param {THREE.Camera} camera - Камера
+ * @param {boolean} isGridVisible - Флаг видимости сетки
+ * @param {number} originalGridOpacity - Оригинальная прозрачность сетки
+ */
+export function checkCameraOrientation(gridHelper, camera, isGridVisible, originalGridOpacity) {
+    if (!gridHelper || !camera) return;
+    
+    // Получаем направление взгляда камеры
+    const cameraDirection = new THREE.Vector3();
+    camera.getWorldDirection(cameraDirection);
+    
+    // Нормаль плоскости сетки (смотрит вверх)
+    const gridNormal = new THREE.Vector3(0, -1, 0);
+    
+    // Угол между направлением камеры и нормалью сетки
+    const angle = cameraDirection.angleTo(gridNormal);
+    
+    // Если камера смотрит вниз (угол близок к 0) - показываем сетку
+    // Если камера смотрит вверх (угол близок к PI) - скрываем сетку
+    const shouldBeVisible = angle < Math.PI / 2; // Показываем если смотрим сверху
+    
+    // Целевая прозрачность
+    const targetOpacity = shouldBeVisible ? originalGridOpacity : 0.0;
+    
+    // Сразу устанавливаем прозрачность, без плавного перехода
+    gridHelper.traverse((child) => {
+        if (child.material) {
+            child.material.opacity = targetOpacity;
+        }
+    });
+    
+    // Обновляем флаг видимости
+    isGridVisible = shouldBeVisible;
+}    const blueMat = new THREE.LineBasicMaterial({ color: 0x3366ff });
     for (let i = -halfSize; i <= halfSize; i += 0.3) {
         const points = [
             new THREE.Vector3(-halfSize, 0.01, i),
