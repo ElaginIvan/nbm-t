@@ -6,6 +6,126 @@ let particles = null; // Для атмосферных частиц
  * Создает адаптивную сетку с автоматическим скрытием
  * @param {THREE.Scene} scene - Сцена для добавления сетки
  */
+// Добавьте эту функцию после createAdaptiveGrid, но до export функций
+function createRedNeonGrid(size, modelWidth = 3, modelLength = 2) {
+    const group = new THREE.Group();
+    
+    // Рассчитываем размер сетки под модель с запасом
+    const gridSize = Math.max(modelWidth, modelLength) * 2.5; // С запасом 2.5x от модели
+    const halfSize = gridSize / 2;
+    
+    // Основная сетка (полупрозрачная красная основа)
+    const mainGrid = new THREE.GridHelper(gridSize, 30, 0xff3333, 0x882222);
+    mainGrid.material.opacity = 0.15;
+    mainGrid.material.transparent = true;
+    group.add(mainGrid);
+    
+    // КРАСНЫЕ ЛИНИИ (по X) - часто, чтобы было видно масштаб
+    const redMat = new THREE.LineBasicMaterial({ color: 0xff3366 });
+    for (let i = -halfSize; i <= halfSize; i += 0.3) { // Шаг 30см для детализации
+        const points = [
+            new THREE.Vector3(i, 0.01, -halfSize),
+            new THREE.Vector3(i, 0.01, halfSize)
+        ];
+        if (Math.abs(i) < 0.1) continue; // Пропускаем центр (там будет яркая ось)
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geo, redMat);
+        group.add(line);
+    }
+    
+    // СИНИЕ ЛИНИИ (по Z) - для контраста и лучшей ориентации
+    const blueMat = new THREE.LineBasicMaterial({ color: 0x3366ff });
+    for (let i = -halfSize; i <= halfSize; i += 0.3) {
+        const points = [
+            new THREE.Vector3(-halfSize, 0.01, i),
+            new THREE.Vector3(halfSize, 0.01, i)
+        ];
+        if (Math.abs(i) < 0.1) continue;
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geo, blueMat);
+        group.add(line);
+    }
+    
+    // ЯРКИЕ ЦЕНТРАЛЬНЫЕ ОСИ
+    const axisX = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-halfSize, 0.02, 0), new THREE.Vector3(halfSize, 0.02, 0)]),
+        new THREE.LineBasicMaterial({ color: 0xff6666 })
+    );
+    group.add(axisX);
+    
+    const axisZ = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.02, -halfSize), new THREE.Vector3(0, 0.02, halfSize)]),
+        new THREE.LineBasicMaterial({ color: 0x6666ff })
+    );
+    group.add(axisZ);
+    
+    // СВЕТЯЩИЕСЯ ТОЧКИ В УЗЛАХ (сетка 1м)
+    const pointMat = new THREE.PointsMaterial({
+        color: 0xff4466,
+        size: 0.15,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending
+    });
+    
+    const pointPositions = [];
+    for (let i = -halfSize; i <= halfSize; i += 1.0) { // Узлы через 1 метр
+        for (let j = -halfSize; j <= halfSize; j += 1.0) {
+            pointPositions.push(i, 0.02, j);
+        }
+    }
+    
+    const pointGeo = new THREE.BufferGeometry();
+    pointGeo.setAttribute('position', new THREE.Float32BufferAttribute(pointPositions, 3));
+    const points = new THREE.Points(pointGeo, pointMat);
+    group.add(points);
+    
+    return group;
+}
+
+// Добавьте эту функцию после createRedNeonGrid
+function addAtmosphericParticles(scene) {
+    const particleGeometry = new THREE.BufferGeometry();
+    const particleCount = 3000;
+    const posArray = new Float32Array(particleCount * 3);
+    const colorArray = new Float32Array(particleCount * 3);
+    
+    for (let i = 0; i < particleCount; i++) {
+        // Частицы в большом объеме вокруг сцены
+        posArray[i*3] = (Math.random() - 0.5) * 30;
+        posArray[i*3+1] = (Math.random() - 0.5) * 15;
+        posArray[i*3+2] = (Math.random() - 0.5) * 30;
+        
+        // Красноватые цвета (вариации красного)
+        const r = 0.7 + Math.random() * 0.5;
+        const g = 0.1 + Math.random() * 0.3;
+        const b = 0.1 + Math.random() * 0.3;
+        
+        colorArray[i*3] = r;
+        colorArray[i*3+1] = g;
+        colorArray[i*3+2] = b;
+    }
+    
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+    particleGeometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
+    
+    const particleMaterial = new THREE.PointsMaterial({
+        size: 0.2,
+        transparent: true,
+        opacity: 0.3,
+        vertexColors: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    
+    const particles = new THREE.Points(particleGeometry, particleMaterial);
+    particles.name = 'atmosphericParticles';
+    scene.add(particles);
+    
+    return particles;
+}
+
+// И ИЗМЕНИТЕ createAdaptiveGrid на это:
 export function createAdaptiveGrid(scene) {
     const size = 100;
     const divisions = 20;
@@ -16,22 +136,20 @@ export function createAdaptiveGrid(scene) {
     // Создаем цветные оси
     const axisLength = size / 2;
     const axesGroup = new THREE.Group();
-    const axisWidth = 0.3; // Ширина полоски (видна сверху)
+    const axisWidth = 0.3;
     
-    // Ось X (красная) - плоскость вытянутая по X
     const planeX = new THREE.Mesh(
         new THREE.PlaneGeometry(axisLength * 2, axisWidth),
         new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: originalGridOpacity, side: THREE.DoubleSide })
     );
-    planeX.rotation.x = -Math.PI / 2; // Кладем на пол
+    planeX.rotation.x = -Math.PI / 2;
     axesGroup.add(planeX);
     
-    // Ось Z (синяя) - плоскость вытянутая по Z
     const planeZ = new THREE.Mesh(
         new THREE.PlaneGeometry(axisWidth, axisLength * 2),
         new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: originalGridOpacity, side: THREE.DoubleSide })
     );
-    planeZ.rotation.x = -Math.PI / 2; // Кладем на пол
+    planeZ.rotation.x = -Math.PI / 2;
     axesGroup.add(planeZ);
     
     axesGroup.position.y = 0.001;
@@ -41,21 +159,21 @@ export function createAdaptiveGrid(scene) {
     gridHelper.add(mainGrid);
     gridHelper.add(axesGroup);
 
-    // Добавляем красную неоновую сетку поверх основной
-    const redNeonGrid = createRedNeonGrid(size);
+    // ДОБАВЛЯЕМ КРАСНУЮ НЕОНОВУЮ СЕТКУ
+    // Размеры вашей модели: 3м длина, 2м ширина
+    const redNeonGrid = createRedNeonGrid(100, 3, 2);
     redNeonGrid.position.y = 0.002; // Чуть выше основной сетки
     gridHelper.add(redNeonGrid);
 
-    // Добавляем атмосферные частицы
-    addAtmosphericParticles(scene);
-
-    // Добавляем туман
-    addFog(scene);
+    // ДОБАВЛЯЕМ АТМОСФЕРНЫЕ ЧАСТИЦЫ
+    const particles = addAtmosphericParticles(scene);
+    
+    // ДОБАВЛЯЕМ ТУМАН
+    scene.fog = new THREE.FogExp2(0x331111, 0.015);
 
     scene.add(gridHelper);
     return gridHelper;
 }
-
 /**
  * Создает красную неоновую сетку
  * @param {number} size - Размер сетки
