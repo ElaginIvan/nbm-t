@@ -14,7 +14,7 @@ export function createAdaptiveGrid(scene) {
     // Создаем цветные оси с помощью цилиндров
     const axisLength = size / 2;
     const axesGroup = new THREE.Group();
-    const axisThickness = 0.1; // Толщина осей (увеличь это значение)
+    const axisThickness = 0.005; // Толщина осей (увеличь это значение)
     
     // Ось X (красная)
     const cylinderX = new THREE.Mesh(
