@@ -1,4 +1,4 @@
-let originalGridOpacity = 1;
+let originalGridOpacity = 0.5;
 
 /**
  * Создает адаптивную сетку с автоматическим скрытием
@@ -42,7 +42,7 @@ export function createAdaptiveGrid(scene) {
     );
     axesGroup.add(lineZ);
     
-    axesGroup.position.y = 0.001;
+    axesGroup.position.y = 0.01;
 
     // Создаем контейнер для всей сетки
     const gridHelper = new THREE.Group();
