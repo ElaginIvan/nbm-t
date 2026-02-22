@@ -474,9 +474,9 @@ function createCuttingPanel() {
         <button id="cutting-toggle" class="cutting-toggle ri-slice-fill" title="Сечение модели"></button>
         <div id="cutting-panel" class="cutting-panel">
             <div class="cutting-axes">
-                ${['X', 'Y', 'Z'].map(axis => 
-                    `<button class="cutting-axis-btn" data-axis="${axis.toLowerCase()}">${axis}</button>`
-                ).join('')}
+                <button class="cutting-axis-btn axis-x" data-axis="x">X</button>
+                <button class="cutting-axis-btn axis-y" data-axis="y">Y</button>
+                <button class="cutting-axis-btn axis-z" data-axis="z">Z</button>
             </div>
             <div class="cutting-slider-container">
                 <input type="range" id="cut-slider" class="cutting-slider" min="0" max="1" step="0.01" value="0" disabled>

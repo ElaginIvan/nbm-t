@@ -88,7 +88,7 @@ function loadModel() {
 
             scene.add(model);
             addEdgesToObject(model);
-            initCuttingTool(scene, model);
+            initCuttingTool(scene, model, renderer);
 
             createAdaptiveGrid(scene);
             gridHelper = scene.getObjectByName('adaptiveGrid');
@@ -320,5 +320,3 @@ window.ModelViewer = {
     onModelLoaded: onModelLoaded,
     resetView: resetView
 };
-
-

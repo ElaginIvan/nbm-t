@@ -14,23 +14,47 @@ export function createAdaptiveGrid(scene) {
     mainGrid.material.opacity = originalGridOpacity;
     mainGrid.material.transparent = true;
 
-    // Центральные оси (более яркие)
-    const axesSize = size / 2;
-    const axesHelper = new THREE.GridHelper(axesSize, 2, 0xff0000, 0x00ff00);
-    axesHelper.material.opacity = 0.8;
-    axesHelper.material.transparent = true;
-    axesHelper.position.y = 0.01; // Немного выше основной сетки чтобы избежать z-fighting
+    // Создаем цветные оси
+    const axisLength = size / 2;
+    const axesGroup = new THREE.Group();
+    
+    // Ось X (красная)
+    const pointsX = [new THREE.Vector3(-axisLength, 0, 0), new THREE.Vector3(axisLength, 0, 0)];
+    const lineX = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pointsX),
+        new THREE.LineBasicMaterial({ color: 0xff0000, transparent: true, opacity: originalGridOpacity })
+    );
+    axesGroup.add(lineX);
+    
+    // Ось Y (зеленая)
+    // const pointsY = [new THREE.Vector3(0, -axisLength, 0), new THREE.Vector3(0, axisLength, 0)];
+    // const lineY = new THREE.Line(
+    //     new THREE.BufferGeometry().setFromPoints(pointsY),
+    //     new THREE.LineBasicMaterial({ color: 0x00ff00, transparent: true, opacity: originalGridOpacity })
+    // );
+    // axesGroup.add(lineY);
+    
+    // Ось Z (синяя)
+    const pointsZ = [new THREE.Vector3(0, 0, -axisLength), new THREE.Vector3(0, 0, axisLength)];
+    const lineZ = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pointsZ),
+        new THREE.LineBasicMaterial({ color: 0x0000ff, transparent: true, opacity: originalGridOpacity })
+    );
+    axesGroup.add(lineZ);
+    
+    axesGroup.position.y = 0.001;
 
     // Создаем контейнер для всей сетки
     const gridHelper = new THREE.Group();
     gridHelper.name = 'adaptiveGrid';
     gridHelper.add(mainGrid);
-    gridHelper.add(axesHelper);
+    gridHelper.add(axesGroup);
 
     scene.add(gridHelper);
     return gridHelper;
 }
 
+// Остальные функции (updateGridPosition, checkCameraOrientation) без изменений
 /**
  * Обновляет позицию и видимость сетки в зависимости от положения камеры
  * @param {THREE.Object3D} model - Загруженная модель
@@ -48,7 +72,7 @@ export function updateGridPosition(model, gridHelper) {
     const minY = box.min.y;
 
     // 3. Помещаем сетку под модель с небольшим отступом
-    gridHelper.position.set(center.x, minY - 0.1, center.z);
+    gridHelper.position.set(center.x, minY - 0.01, center.z);
 
     // 4. Масштабируем сетку в соответствии с размером модели
     const modelSize = Math.max(size.x, size.z);
@@ -84,7 +108,6 @@ export function checkCameraOrientation(gridHelper, camera, isGridVisible, origin
     const targetOpacity = shouldBeVisible ? originalGridOpacity : 0.0;
     
     // Сразу устанавливаем прозрачность, без плавного перехода
-    // (чтобы избежать накопления изменений при resize)
     gridHelper.traverse((child) => {
         if (child.material) {
             child.material.opacity = targetOpacity;

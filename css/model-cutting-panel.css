@@ -99,13 +99,25 @@
 
 .cutting-axis-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
-    color: var(--text-color);
 }
 
 .cutting-axis-btn.active {
     background: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.3);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Цвета кнопок */
+.cutting-axis-btn.axis-x {
+    color: #ff4444;
+}
+
+.cutting-axis-btn.axis-y {
+    color: #44ff44;
+}
+
+.cutting-axis-btn.axis-z {
+    color: #4444ff;
 }
 
 /* Контейнер слайдера */
