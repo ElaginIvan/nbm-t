@@ -11,28 +11,29 @@ export function createAdaptiveGrid(scene) {
     mainGrid.material.opacity = originalGridOpacity;
     mainGrid.material.transparent = true;
 
-    // Создаем цветные оси с помощью цилиндров
+    // Создаем цветные оси
     const axisLength = size / 2;
     const axesGroup = new THREE.Group();
-    const axisThickness = 0.005; // Толщина осей (увеличь это значение)
+    const axisWidth = 0.05; // Ширина полоски (видна сверху)
+    const axisHeight = 0.05; // Толщина полоски (вертикальная)
     
-    // Ось X (красная)
-    const cylinderX = new THREE.Mesh(
-        new THREE.CylinderGeometry(axisThickness, axisThickness, axisLength * 2, 8),
+    // Ось X (красная) - горизонтальная полоска, широкая по X и Y
+    const boxX = new THREE.Mesh(
+        new THREE.BoxGeometry(axisLength * 2, axisWidth, axisHeight),
         new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: originalGridOpacity })
     );
-    cylinderX.rotation.z = Math.PI / 2; // Поворачиваем вдоль оси X
-    cylinderX.position.set(0, 0, 0);
-    axesGroup.add(cylinderX);
+    // Поворачиваем так, чтобы ширина была видна сверху (в плоскости XZ)
+    boxX.rotation.x = Math.PI / 2; // Поворачиваем вертикальную полоску в горизонтальную плоскость
+    axesGroup.add(boxX);
     
-    // Ось Z (синяя)
-    const cylinderZ = new THREE.Mesh(
-        new THREE.CylinderGeometry(axisThickness, axisThickness, axisLength * 2, 8),
+    // Ось Z (синяя) - горизонтальная полоска, широкая по Z и Y
+    const boxZ = new THREE.Mesh(
+        new THREE.BoxGeometry(axisHeight, axisWidth, axisLength * 2),
         new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: originalGridOpacity })
     );
-    cylinderZ.rotation.x = Math.PI / 2; // Поворачиваем вдоль оси Z
-    cylinderZ.position.set(0, 0, 0);
-    axesGroup.add(cylinderZ);
+    // Поворачиваем так, чтобы ширина была видна сверху (в плоскости XZ)
+    boxZ.rotation.x = Math.PI / 2;
+    axesGroup.add(boxZ);
     
     axesGroup.position.y = 0.01;
 
@@ -44,7 +45,6 @@ export function createAdaptiveGrid(scene) {
     scene.add(gridHelper);
     return gridHelper;
 }
-
 // Остальные функции (updateGridPosition, checkCameraOrientation) без изменений
 /**
  * Обновляет позицию и видимость сетки в зависимости от положения камеры
