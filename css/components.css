@@ -97,10 +97,10 @@
     padding: 2rem;
 }
 
-.drawing-placeholder i {
+.drawing-placeholder svg {
     font-size: 3rem;
     margin-bottom: 1rem;
-    color: var(--border-color);
+    fill: var(--border-color);
 }
 
 .drawing-placeholder p {
@@ -119,7 +119,7 @@
     z-index: 10;
 }
 
-.drawing-indicator{
+.drawing-indicator {
     color: var(--text-color);
     font-size: 0.875rem;
     background: var(--button-color);
@@ -253,8 +253,8 @@
 }
 
 .part-icon {
-    color: var(--primary-color);
-    font-size: 0.875rem;
+    fill: var(--primary-color);
+    height: 16px;
     width: 16px;
     text-align: center;
     flex-shrink: 0;
@@ -308,22 +308,31 @@
 .toggle-3d-2d-button,
 .drawing-btn {
     background: var(--button-color);
-    padding: var(--spacing-sm) var(--spacing-lg);
-    border-radius: 30px;
-    text-decoration: none;
-    color: var(--text-color);
-    display: inline-flex;
-    align-items: center;
     gap: var(--spacing-sm);
-    box-shadow: 0 0px 10px rgba(0, 0, 0, 0.3);
-    font-weight: 500;
-    z-index: 1000;
+    box-shadow: 0 0px 10px rgba(0, 0, 0, 0.3);   
     transition: var(--transition);
     backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    cursor: pointer;
-
+    -webkit-backdrop-filter: blur(12px);  
     border: 1px solid rgba(255, 255, 255, 0.15);
+    pointer-events: auto;
+    cursor: pointer;
+    z-index: 1000;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 34px;
+    width: 64px;
+    border-radius: 30px;
+}
+
+.back-button svg,
+.expand-button svg,
+.toggle-3d-2d-button svg,
+.drawing-btn svg {
+    fill: var(--text-color);
+    height: 21px;
+    width: 21px;
 }
 
 .expand-button span,
@@ -390,8 +399,8 @@
     .expand-button,
     .toggle-3d-2d-button,
     .drawing-btn {
-        padding: var(--spacing-xs) var(--spacing-md) !important;
-        font-size: 0.875rem !important;
+        height: 24px;
+        width: 46px;
     }
 }
 
@@ -433,7 +442,8 @@
     height: 1px;
     background-color: var(--border-color);
     width: 100%;
-    pointer-events: none; /* Пропускаем события через линию к родителю */
+    pointer-events: none;
+    /* Пропускаем события через линию к родителю */
 }
 
 /* Модель контейнер должен занимать оставшееся пространство */
@@ -447,11 +457,13 @@
 /* Увеличиваем зону клика для линии на мобильных */
 @media (hover: none) and (pointer: coarse) {
     .resize-handle-line {
-        height: 4px; /* Увеличиваем высоту для удобства касания */
-        background-color: transparent; /* Делаем невидимой, но кликабельной */
+        height: 4px;
+        /* Увеличиваем высоту для удобства касания */
+        background-color: transparent;
+        /* Делаем невидимой, но кликабельной */
         position: relative;
     }
-    
+
     .resize-handle-line::after {
         content: '';
         position: absolute;
@@ -492,7 +504,8 @@
     align-items: center;
     justify-content: center;
     transition: var(--transition);
-    z-index: 100; /* Увеличиваем z-index! */
+    z-index: 100;
+    /* Увеличиваем z-index! */
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -500,12 +513,18 @@
     width: 48px;
 }
 
+.view-toggle-button svg {
+    height: 1.25em;
+    width: 1.25em;
+    fill: var(--text-color);
+}
+
 /* Адаптивность для мобильных */
 @media (hover: none) and (pointer: coarse) {
     .resize-handle {
         height: 25px;
     }
-    
+
     .view-toggle-button {
         padding: var(--spacing-md);
         font-size: 1.1rem;

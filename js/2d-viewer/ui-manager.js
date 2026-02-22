@@ -20,7 +20,7 @@ export const UIManager = {
             drawingContainer.classList.add('active');
 
             const hasImage = imageElement.src && imageElement.src !== window.location.href;
-            
+
             if (hasImage) {
                 imageElement.style.display = 'block';
                 placeholder.style.display = 'none';
@@ -35,18 +35,9 @@ export const UIManager = {
      * Обновляет состояние кнопки переключения режима
      */
     updateToggleButton(mode) {
-        const toggleBtn = document.getElementById('toggle-3d-2d-btn');
-        if (!toggleBtn) return;
-
-        toggleBtn.classList.remove('mode-3d', 'mode-2d');
-        toggleBtn.classList.add(`mode-${mode.toLowerCase()}`);
-
-        const icon = toggleBtn.querySelector('i');
-        if (mode === '3D') {
-            icon.className = 'fas fa-image';
-        } else {
-            icon.className = 'fas fa-cube';
-        }
+        const btn = document.getElementById('toggle-3d-2d-btn');
+        const icon = mode === '3D' ? 'image' : 'cube';
+        btn.innerHTML = `<svg><use xlink:href="assets/icons/sprite.svg#${icon}"></use></svg>`;
     },
 
     /**
@@ -55,31 +46,31 @@ export const UIManager = {
     createMultiDrawingControls(drawingLoader) {
         const controls = document.querySelector('.drawing-controls');
         this.removeMultiDrawingControls();
-    
+
         // Кнопка "Предыдущий"
         const prevBtn = document.createElement('button');
         prevBtn.className = 'drawing-btn prev-drawing';
         prevBtn.title = 'Предыдущий лист';
-        prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+        prevBtn.innerHTML = '<svg><use xlink:href="assets/icons/sprite.svg#chevron-left"></use></svg>';
         controls.appendChild(prevBtn);
-    
+
         // Индикатор
         const indicator = document.createElement('div');
         indicator.className = 'drawing-indicator';
         indicator.innerHTML = '<span class="current-sheet">1</span> / <span class="total-sheets">1</span>';
         controls.appendChild(indicator);
-    
+
         // Кнопка "Следующий"
         const nextBtn = document.createElement('button');
         nextBtn.className = 'drawing-btn next-drawing';
         nextBtn.title = 'Следующий лист';
-        nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+        nextBtn.innerHTML = '<svg><use xlink:href="assets/icons/sprite.svg#chevron-right"></use></svg>';
         controls.appendChild(nextBtn);
-    
+
         // Обработчики
         prevBtn.addEventListener('click', () => drawingLoader.switchDrawing(-1));
         nextBtn.addEventListener('click', () => drawingLoader.switchDrawing(1));
-    
+
         this.updateDrawingIndicator();
     },
 

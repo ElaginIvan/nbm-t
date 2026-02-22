@@ -7,8 +7,7 @@
     <title>3D Model Viewer</title>
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
-
+    <link rel="stylesheet" href="assets/icons/sprite.svg">
 </head>
 
 <body>
@@ -20,7 +19,9 @@
         <div class="control-buttons">
             <!-- Кнопка возврата -->
             <a href="index.html" class="back-button">
-                <i class="fa-solid fa-house"></i>
+                <svg>
+                    <use xlink:href="assets/icons/sprite.svg#house"></use>
+                </svg>
                 <span>Назад</span>
             </a>
 
@@ -28,14 +29,16 @@
             <div class="button-group">
                 <!-- Кнопка переключения 3D/2D -->
                 <a href="#" id="toggle-3d-2d-btn" class="toggle-3d-2d-button">
-                    <i class="fas fa-image"></i>
-                    <span>3D</span>
+                    <svg>
+                        <use xlink:href="assets/icons/sprite.svg#image"></use>
+                    </svg>
                 </a>
 
                 <!-- Кнопка развертывания -->
                 <a href="#" id="toggle-fullscreen-btn" class="expand-button">
-                    <i class="fas fa-expand"></i>
-                    <span>Во весь экран</span>
+                    <svg>
+                        <use xlink:href="assets/icons/sprite.svg#expand"></use>
+                    </svg>
                 </a>
             </div>
         </div>
@@ -50,13 +53,15 @@
             <div class="drawing-wrapper">
                 <img id="drawing-image" class="drawing-image no-save" alt="Чертеж детали">
                 <div class="drawing-placeholder" id="drawing-placeholder">
-                    <i class="fas fa-cube"></i>
+                    <svg>
+                        <use xlink:href="assets/icons/sprite.svg#cube"></use>
+                    </svg>
                     <p>Выберите деталь в таблице для просмотра чертежа</p>
                 </div>
             </div>
 
             <div class="drawing-controls">
-                 <!-- Кнопки навигации по чертежам будут добавляться сюда динамически -->
+                <!-- Кнопки навигации по чертежам будут добавляться сюда динамически -->
             </div>
         </div>
 
@@ -64,9 +69,10 @@
         <div class="resize-handle" id="resize-handle">
             <div class="resize-handle-line"></div>
             <!-- ЗАМЕНЯЕМ dots на кнопку -->
-            <button id="view-toggle-btn" class="view-toggle-button" title="Переключить между спецификацией и раскроем"
-                aria-label="Переключить между спецификацией и раскроем">
-                <i class="fas fa-cut"></i>
+            <button id="view-toggle-btn" class="view-toggle-button">
+                <svg>
+                    <use xlink:href="assets/icons/sprite.svg#cut"></use>
+                </svg>
             </button>
         </div>
 

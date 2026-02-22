@@ -264,19 +264,9 @@ export class ResizeHandler {
     }
 
     updateToggleIcon() {
-        if (!this.viewToggleBtn) return;
-
-        const icon = this.viewToggleBtn.querySelector('i');
-        if (icon) {
-            icon.className = this.currentView === 'specification' ?
-                'fas fa-cut' : 'fas fa-list-alt';
-        }
-
-        const title = this.currentView === 'specification' ?
-            'Перейти к раскрою' : 'Перейти к спецификации';
-
-        this.viewToggleBtn.setAttribute('title', title);
-        this.viewToggleBtn.setAttribute('aria-label', title);
+        const icon = this.currentView === 'specification' ? 'cut' : 'list-alt';
+        
+        this.viewToggleBtn.innerHTML = `<svg><use xlink:href="assets/icons/sprite.svg#${icon}"></use></svg>`;
     }
 
     saveViewState() {

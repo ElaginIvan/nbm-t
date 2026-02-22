@@ -162,22 +162,11 @@ export const FullscreenManager = {
     },
 
     updateButtonState() {
-        if (this.isFullscreen) {
-            this.toggleBtn.innerHTML = `
-                <i class="fas fa-compress"></i>
-                <span>Свернуть</span>
-            `;
-            this.toggleBtn.title = 'Свернуть в обычный режим (ESC)';
-            this.toggleBtn.classList.add('fullscreen-active');
-        } else {
-            this.toggleBtn.innerHTML = `
-                <i class="fas fa-expand"></i>
-                <span>Развернуть</span>
-            `;
-            this.toggleBtn.title = 'Развернуть на весь экран';
-            this.toggleBtn.classList.remove('fullscreen-active');
-        }
+        const icon = this.isFullscreen ? 'compress' : 'expand';
+        
+        this.toggleBtn.innerHTML = `<svg><use xlink:href="assets/icons/sprite.svg#${icon}"></use></svg>`;
     },
+    
 
     setupDrawingControls() {
         const drawingControls = this.drawingContainer.querySelector('.drawing-controls');
