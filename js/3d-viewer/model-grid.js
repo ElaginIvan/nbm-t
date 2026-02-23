@@ -44,7 +44,6 @@ export function createAdaptiveGrid(scene) {
     scene.add(gridHelper);
     return gridHelper;
 }
-
 // Остальные функции (updateGridPosition, checkCameraOrientation) без изменений
 /**
  * Обновляет позицию и видимость сетки в зависимости от положения камеры
