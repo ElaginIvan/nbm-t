@@ -453,7 +453,9 @@ async function initializeCuttingCalculator() {
     // Показываем начальное состояние
     resultsContainer.innerHTML = `
         <div class="empty-state">
-            <i class="fas fa-cut"></i>
+            <svg>
+                <use xlink:href="assets/icons/sprite.svg#cut">
+            </use></svg>
             <h3>Готов к работе</h3>
             <p>Настройте параметры и нажмите "Раскроить"</p>
         </div>

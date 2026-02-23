@@ -106,6 +106,7 @@ function loadModel() {
             controls.target.set(0, 0, 0);
             controls.update();
 
+            // onWindowResize(camera, renderer, gridHelper, model);
             initResizeListener(camera, renderer, gridHelper, model);
 
             // Обработчик двойного клика на canvas, для сброса вида

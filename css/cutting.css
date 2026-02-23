@@ -70,17 +70,21 @@
 
 .controls-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr); /* Равные колонки */
-    gap: 15px; /* Уменьшенный gap для мобильных */
+    grid-template-columns: repeat(3, 1fr);
+    /* Равные колонки */
+    gap: 15px;
+    /* Уменьшенный gap для мобильных */
     margin-bottom: 20px;
-    align-items: end; /* Выравнивание по нижнему краю */
+    align-items: end;
+    /* Выравнивание по нижнему краю */
 }
 
 .control-group {
     display: flex;
     flex-direction: column;
     gap: 5px;
-    min-width: 0; /* Для предотвращения переполнения */
+    min-width: 0;
+    /* Для предотвращения переполнения */
 }
 
 .control-group label {
@@ -88,9 +92,11 @@
     color: var(--text-color);
     font-size: 14px;
     margin-bottom: 5px;
-    white-space: nowrap; /* Текст в одну строку */
+    white-space: nowrap;
+    /* Текст в одну строку */
     overflow: hidden;
-    text-overflow: ellipsis; /* Троеточие если не помещается */
+    text-overflow: ellipsis;
+    /* Троеточие если не помещается */
 }
 
 /* Унифицируем размеры полей ввода */
@@ -102,9 +108,12 @@
     font-size: 14px;
     background-color: white;
     width: 100%;
-    box-sizing: border-box; /* Учитываем padding в ширине */
-    height: 40px; /* Фиксированная высота */
-    min-width: 0; /* Для предотвращения переполнения */
+    box-sizing: border-box;
+    /* Учитываем padding в ширине */
+    height: 40px;
+    /* Фиксированная высота */
+    min-width: 0;
+    /* Для предотвращения переполнения */
 }
 
 .control-group input:focus,
@@ -120,14 +129,18 @@
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23333' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 8px center; /* Уменьшен отступ для мобильных */
-    background-size: 12px; /* Уменьшен размер иконки */
-    padding-right: 30px; /* Уменьшен padding для мобильных */
+    background-position: right 8px center;
+    /* Уменьшен отступ для мобильных */
+    background-size: 12px;
+    /* Уменьшен размер иконки */
+    padding-right: 30px;
+    /* Уменьшен padding для мобильных */
 }
 
 /* Для числового поля */
 .control-group input[type="number"] {
-    -moz-appearance: textfield; /* Убираем стрелки в Firefox */
+    -moz-appearance: textfield;
+    /* Убираем стрелки в Firefox */
 }
 
 .control-group input[type="number"]::-webkit-outer-spin-button,
@@ -140,7 +153,8 @@
     background-color: #007bff;
     color: white;
     border: none;
-    padding: 12px 20px; /* Уменьшен padding для мобильных */
+    padding: 12px 20px;
+    /* Уменьшен padding для мобильных */
     border-radius: 4px;
     font-size: 16px;
     font-weight: 500;
@@ -150,7 +164,8 @@
     max-width: 200px;
     margin: 0 auto;
     display: block;
-    height: 44px; /* Сходная высота с полями ввода */
+    height: 44px;
+    /* Сходная высота с полями ввода */
 }
 
 .cut-btn:hover {
@@ -204,7 +219,8 @@
     font-weight: 500;
 }
 
-.material-summary h4, p {
+.material-summary h4,
+p {
     margin-bottom: 4px;
 }
 
@@ -297,10 +313,32 @@
     color: var(--text-secondary);
 }
 
+
+/* Информационный заголовок */
+.empty-state svg {
+    display: flex;
+    height: 50px;
+    width: 50px;
+    fill: var(--text-color);
+    position: relative;
+    width: 710px;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 20px;
+}
+
+.empty-state h3, p {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+
 /* Адаптивность для вкладки раскроя - сохраняем горизонтальное расположение */
 @media (max-width: 768px) {
     .cutting-full {
-        padding: 8px; /* Уменьшенный padding */
+        padding: 8px;
+        /* Уменьшенный padding */
     }
 
     .cutting-controls {
@@ -308,23 +346,30 @@
     }
 
     .controls-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr)); /* Форсируем равные колонки */
-        gap: 8px; /* Еще меньше gap */
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        /* Форсируем равные колонки */
+        gap: 8px;
+        /* Еще меньше gap */
     }
 
     .control-group label {
-        font-size: 12px; /* Уменьшенный размер шрифта */
+        font-size: 12px;
+        /* Уменьшенный размер шрифта */
     }
 
     .control-group input,
     .control-group select {
-        padding: 8px 10px; /* Уменьшенный padding */
-        font-size: 13px; /* Уменьшенный размер шрифта */
-        height: 36px; /* Уменьшенная высота */
+        padding: 8px 10px;
+        /* Уменьшенный padding */
+        font-size: 13px;
+        /* Уменьшенный размер шрифта */
+        height: 36px;
+        /* Уменьшенная высота */
     }
 
     .control-group select {
-        background-position: right 6px center; /* Еще ближе иконка */
+        background-position: right 6px center;
+        /* Еще ближе иконка */
         padding-right: 24px;
         background-size: 10px;
     }
@@ -353,7 +398,8 @@
 /* Для очень маленьких экранов */
 @media (max-width: 480px) {
     .controls-grid {
-        gap: 6px; /* Минимальный gap */
+        gap: 6px;
+        /* Минимальный gap */
     }
 
     .control-group label {

@@ -5,11 +5,8 @@ let originalGridOpacity = 0.5;
  * @param {THREE.Scene} scene - Сцена для добавления сетки
  */
 export function createAdaptiveGrid(scene) {
-    // Создаем сетку с настройками для лучшей видимости
-    const size = 100; // Размер сетки
-    const divisions = 20; // Количество делений
-
-    // Основная сетка (серые линии)
+    const size = 100;
+    const divisions = 20;
     const mainGrid = new THREE.GridHelper(size, divisions, 0x888888, 0x444444);
     mainGrid.material.opacity = originalGridOpacity;
     mainGrid.material.transparent = true;
@@ -17,34 +14,28 @@ export function createAdaptiveGrid(scene) {
     // Создаем цветные оси
     const axisLength = size / 2;
     const axesGroup = new THREE.Group();
+    const axisWidth = 0.3; // Ширина полоски (видна сверху)
     
-    // Ось X (красная)
-    const pointsX = [new THREE.Vector3(-axisLength, 0, 0), new THREE.Vector3(axisLength, 0, 0)];
-    const lineX = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(pointsX),
-        new THREE.LineBasicMaterial({ color: 0xff0000, transparent: true, opacity: originalGridOpacity })
+    // Ось X (красная) - плоскость вытянутая по X
+    const planeX = new THREE.Mesh(
+        new THREE.PlaneGeometry(axisLength * 2, axisWidth),
+        new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: originalGridOpacity, side: THREE.DoubleSide })
     );
-    axesGroup.add(lineX);
+    planeX.rotation.x = -Math.PI / 2; // Кладем на пол
+    // orientation: плоскость лежит, ее длина по X, ширина по Z
+    axesGroup.add(planeX);
     
-    // Ось Y (зеленая)
-    // const pointsY = [new THREE.Vector3(0, -axisLength, 0), new THREE.Vector3(0, axisLength, 0)];
-    // const lineY = new THREE.Line(
-    //     new THREE.BufferGeometry().setFromPoints(pointsY),
-    //     new THREE.LineBasicMaterial({ color: 0x00ff00, transparent: true, opacity: originalGridOpacity })
-    // );
-    // axesGroup.add(lineY);
-    
-    // Ось Z (синяя)
-    const pointsZ = [new THREE.Vector3(0, 0, -axisLength), new THREE.Vector3(0, 0, axisLength)];
-    const lineZ = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(pointsZ),
-        new THREE.LineBasicMaterial({ color: 0x0000ff, transparent: true, opacity: originalGridOpacity })
+    // Ось Z (синяя) - плоскость вытянутая по Z
+    const planeZ = new THREE.Mesh(
+        new THREE.PlaneGeometry(axisWidth, axisLength * 2),
+        new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: originalGridOpacity, side: THREE.DoubleSide })
     );
-    axesGroup.add(lineZ);
+    planeZ.rotation.x = -Math.PI / 2; // Кладем на пол
+    // orientation: плоскость лежит, ее длина по Z, ширина по X
+    axesGroup.add(planeZ);
     
     axesGroup.position.y = 0.001;
 
-    // Создаем контейнер для всей сетки
     const gridHelper = new THREE.Group();
     gridHelper.name = 'adaptiveGrid';
     gridHelper.add(mainGrid);
