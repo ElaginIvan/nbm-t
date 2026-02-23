@@ -1,38 +1,39 @@
 /**
- * Настраивает освещение сцены с реалистичными тенями и контрастом
+ * Настраивает техническое освещение для разглядывания деталей модели
  * @param {THREE.Scene} scene - Сцена для добавления света
  */
 export function setupLights(scene) {
-    // 1. Окружающий свет - теперь только для подсветки теней
-    const ambientLight = new THREE.AmbientLight(0x404060, 0.3); // Холодный оттенок, низкая интенсивность
+    // Минимальный окружающий свет - только чтобы убрать абсолютно черные тени
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
     scene.add(ambientLight);
 
-    // 2. Основной ключевой свет (сверху-спереди-слева) - создает основные тени и объем
-    const keyLight = new THREE.DirectionalLight(0xffeedd, 1.2);
-    keyLight.position.set(-20, 30, 20);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.width = 1024;
-    keyLight.shadow.mapSize.height = 1024;
-    keyLight.shadow.bias = -0.0001;
-    scene.add(keyLight);
+    // 1. ПЕРЕДНИЙ СВЕТ (самый важный) - яркий, спереди-сверху
+    const frontLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    frontLight.position.set(0, 20, 30); // Прямо спереди и чуть сверху
+    scene.add(frontLight);
 
-    // 3. Заполняющий свет (справа-сзади) - мягко подсвечивает тени
-    const fillLight = new THREE.DirectionalLight(0x6688aa, 0.6);
-    fillLight.position.set(25, 15, -20);
-    scene.add(fillLight);
+    // 2. НИЖНИЙ ПЕРЕДНИЙ СВЕТ - чтобы подсветить снизу
+    const bottomFrontLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    bottomFrontLight.position.set(0, -20, 25); // Снизу-спереди
+    scene.add(bottomFrontLight);
 
-    // 4. Контровой свет (сзади) - создает ореол и отделяет объект от фона
-    const backLight = new THREE.DirectionalLight(0x88aaff, 0.5);
-    backLight.position.set(0, 20, -40);
+    // 3. ЛЕВЫЙ ПЕРЕДНИЙ СВЕТ - для подсветки левой стороны спереди
+    const leftFrontLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    leftFrontLight.position.set(-25, 10, 20); // Слева-спереди
+    scene.add(leftFrontLight);
+
+    // 4. ПРАВЫЙ ПЕРЕДНИЙ СВЕТ - для подсветки правой стороны спереди
+    const rightFrontLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    rightFrontLight.position.set(25, 10, 20); // Справа-спереди
+    scene.add(rightFrontLight);
+
+    // 5. ВЕРХНИЙ СВЕТ - общий верхний свет
+    const topLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    topLight.position.set(0, 30, 0); // Строго сверху
+    scene.add(topLight);
+
+    // 6. ЗАДНИЙ СВЕТ (слабее) - только чтобы контур не терялся
+    const backLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    backLight.position.set(0, 10, -30); // Сзади
     scene.add(backLight);
-
-    // 5. Нижний свет - для подсветки снизу (опционально)
-    const bottomLight = new THREE.DirectionalLight(0x446688, 0.2);
-    bottomLight.position.set(0, -20, 0);
-    scene.add(bottomLight);
-
-    // Дополнительно: добавить точечный свет для акцентов
-    const pointLight = new THREE.PointLight(0xffaa88, 0.4, 100);
-    pointLight.position.set(-15, 25, 25);
-    scene.add(pointLight);
 }
