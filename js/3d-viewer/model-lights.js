@@ -14,7 +14,7 @@ export function setupLights(scene) {
 
     // 2. Нижний свет (чтобы было видно снизу)
     const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
-    directionalLight2.position.set(0, -50, 0);
+    directionalLight2.position.set(0, -30, 0);
     scene.add(directionalLight2);
 
     // 3. Свет спереди-слева
