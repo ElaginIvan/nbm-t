@@ -1,29 +1,38 @@
 /**
- * Настраивает освещение сцены
+ * Настраивает освещение сцены с реалистичными тенями и контрастом
  * @param {THREE.Scene} scene - Сцена для добавления света
  */
 export function setupLights(scene) {
-    // Основное освещение
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // Увеличиваем ambient
+    // 1. Окружающий свет - теперь только для подсветки теней
+    const ambientLight = new THREE.AmbientLight(0x404060, 0.3); // Холодный оттенок, низкая интенсивность
     scene.add(ambientLight);
 
-    // 1. Верхний свет
-    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.6);
-    directionalLight1.position.set(0, 50, 0);
-    scene.add(directionalLight1);
+    // 2. Основной ключевой свет (сверху-спереди-слева) - создает основные тени и объем
+    const keyLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+    keyLight.position.set(-20, 30, 20);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 1024;
+    keyLight.shadow.mapSize.height = 1024;
+    keyLight.shadow.bias = -0.0001;
+    scene.add(keyLight);
 
-    // 2. Нижний свет (чтобы было видно снизу)
-    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.2);
-    directionalLight2.position.set(0, -50, 0);
-    scene.add(directionalLight2);
+    // 3. Заполняющий свет (справа-сзади) - мягко подсвечивает тени
+    const fillLight = new THREE.DirectionalLight(0x6688aa, 0.6);
+    fillLight.position.set(25, 15, -20);
+    scene.add(fillLight);
 
-    // 3. Свет спереди-слева
-    const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.6);
-    directionalLight3.position.set(-30, 20, 30);
-    scene.add(directionalLight3);
+    // 4. Контровой свет (сзади) - создает ореол и отделяет объект от фона
+    const backLight = new THREE.DirectionalLight(0x88aaff, 0.5);
+    backLight.position.set(0, 20, -40);
+    scene.add(backLight);
 
-    // 4. Свет сзади-справа
-    const directionalLight4 = new THREE.DirectionalLight(0xffffff, 0.6);
-    directionalLight4.position.set(30, 10, -30);
-    scene.add(directionalLight4);
+    // 5. Нижний свет - для подсветки снизу (опционально)
+    const bottomLight = new THREE.DirectionalLight(0x446688, 0.2);
+    bottomLight.position.set(0, -20, 0);
+    scene.add(bottomLight);
+
+    // Дополнительно: добавить точечный свет для акцентов
+    const pointLight = new THREE.PointLight(0xffaa88, 0.4, 100);
+    pointLight.position.set(-15, 25, 25);
+    scene.add(pointLight);
 }
