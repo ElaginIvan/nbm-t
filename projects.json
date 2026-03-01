@@ -6,7 +6,8 @@
             "description": "Контейнер для твердобытовых отходов.",
             "previewImage": "models/tbo-7/preview.png",
             "modelFile": "models/tbo-7/model.glb",
-            "cpecFile": "models/tbo-7/cpec.csv"
+            "cpecFile": "models/tbo-7/cpec.csv",
+            "modelColor": "#cccccc"
         },
         {
             "id": "tbo-4-k",
@@ -14,7 +15,9 @@
             "description": "Контейнер для твердобытовых отходов.",
             "previewImage": "models/tbo-4-k/preview.png",
             "modelFile": "models/tbo-4-k/model.glb",
-            "cpecFile": "models/tbo-4-k/cpec.csv"
+            "cpecFile": "models/tbo-4-k/cpec.csv",
+            "modelColor": "#006629"
+   
         },
         {
             "id": "tbo-6-k",
@@ -22,7 +25,8 @@
             "description": "Контейнер для твердобытовых отходов.",
             "previewImage": "models/tbo-6-k/preview.png",
             "modelFile": "models/tbo-6-k/model.glb",
-            "cpecFile": "models/tbo-6-k/cpec.csv"
+            "cpecFile": "models/tbo-6-k/cpec.csv",
+            "modelColor": "#a8b800"
         },
         {
             "id": "tbo-8-k",
@@ -30,7 +34,8 @@
             "description": "Контейнер для твердобытовых отходов.",
             "previewImage": "models/tbo-8-k/preview.png",
             "modelFile": "models/tbo-8-k/model.glb",
-            "cpecFile": "models/tbo-8-k/cpec.csv"
+            "cpecFile": "models/tbo-8-k/cpec.csv",
+            "modelColor": "#0058bd"
         }
     ]
 }

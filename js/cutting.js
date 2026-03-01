@@ -456,8 +456,8 @@ async function initializeCuttingCalculator() {
             <svg>
                 <use xlink:href="assets/icons/sprite.svg#cut">
             </use></svg>
-            <h3>Готов к работе</h3>
-            <p>Настройте параметры и нажмите "Раскроить"</p>
+            <h3 class = "info-start">Готов к работе</h3>
+            <p class = "info-start">Настройте параметры и нажмите "Раскроить"</p>
         </div>
     `;
 }

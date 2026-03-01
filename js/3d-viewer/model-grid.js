@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 let originalGridOpacity = 0.5;
 
 /**
@@ -10,6 +12,7 @@ export function createAdaptiveGrid(scene) {
     const mainGrid = new THREE.GridHelper(size, divisions, 0x888888, 0x444444);
     mainGrid.material.opacity = originalGridOpacity;
     mainGrid.material.transparent = true;
+    mainGrid.material.receiveShadow = false; // Сетка не получает тени
 
     // Создаем цветные оси
     const axisLength = size / 2;
@@ -21,17 +24,17 @@ export function createAdaptiveGrid(scene) {
         new THREE.PlaneGeometry(axisLength * 2, axisWidth),
         new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: originalGridOpacity, side: THREE.DoubleSide })
     );
-    planeX.rotation.x = -Math.PI / 2; // Кладем на пол
-    // orientation: плоскость лежит, ее длина по X, ширина по Z
+    planeX.rotation.x = -Math.PI / 2;
+    planeX.receiveShadow = false; // Не получает тени
     axesGroup.add(planeX);
-    
+
     // Ось Z (синяя) - плоскость вытянутая по Z
     const planeZ = new THREE.Mesh(
         new THREE.PlaneGeometry(axisWidth, axisLength * 2),
         new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: originalGridOpacity, side: THREE.DoubleSide })
     );
-    planeZ.rotation.x = -Math.PI / 2; // Кладем на пол
-    // orientation: плоскость лежит, ее длина по Z, ширина по X
+    planeZ.rotation.x = -Math.PI / 2;
+    planeZ.receiveShadow = false; // Не получает тени
     axesGroup.add(planeZ);
     
     axesGroup.position.y = 0.001;

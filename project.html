@@ -143,9 +143,15 @@
     <div id="project-data" style="display: none;"></div>
 
     <!-- Three.js библиотеки -->
-    <script src="js/three.js/three.min.js"></script>
-    <script src="js/three.js/OrbitControls.js"></script>
-    <script src="js/three.js/GLTFLoader.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./js/three.js/three.module.min.js",
+            "three/addons/": "./js/three.js/",
+            "three/utils/": "./js/three.js/utils/"
+        }
+    }
+    </script>
 
     <!-- Основные скрипты -->
     <script src="js/dataService.js" type="module"></script>

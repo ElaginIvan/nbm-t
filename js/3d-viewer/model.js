@@ -3,7 +3,16 @@ let scene, camera, renderer, controls, model, gridHelper;
 let isGridVisible = true;
 let originalGridOpacity = 0.5;
 
+/**
+ * Глобальная константа цвета модели
+ * Установите null чтобы использовать цвет из projects.json или цвет модели по умолчанию
+ */
+// Зеленый - 0x006629, Желтый - 0xa8b800, Синий - 0x0058bd
+const DEFAULT_MODEL_COLOR = null; // Например: '#FF5733' или 0xFF5733
+
 // Импорты
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/GLTFLoader.js';
 import { initCuttingTool } from './model-cut.js';
 import { getModelPath, showErrorMessage } from './model-utils.js';
 import { setupLights } from './model-lights.js';
@@ -56,6 +65,43 @@ function init() {
 }
 
 /**
+ * Получает цвет модели из projects.json или глобальной константы
+ * @returns {string|null} Цвет в формате hex или null
+ */
+function getModelColor() {
+    // Сначала проверяем глобальную константу
+    if (DEFAULT_MODEL_COLOR) {
+        return DEFAULT_MODEL_COLOR;
+    }
+
+    // Затем проверяем projects.json
+    const projectData = document.getElementById('project-data');
+    if (projectData) {
+        const color = projectData.getAttribute('data-model-color');
+        if (color) {
+            return color;
+        }
+    }
+
+    // Если цвет не указан, возвращаем null (используется цвет модели по умолчанию)
+    return null;
+}
+
+/**
+ * Применяет цвет ко всем мешам модели
+ * @param {THREE.Object3D} object - Объект модели
+ * @param {string} color - Цвет в формате hex
+ */
+function applyModelColor(object, color) {
+    object.traverse((child) => {
+        if (child.isMesh && child.material) {
+            const newColor = new THREE.Color(color);
+            child.material.color = newColor;
+        }
+    });
+}
+
+/**
  * Загружает модель с гарантией завершения
  */
 function loadModel() {
@@ -67,7 +113,7 @@ function loadModel() {
         return;
     }
 
-    const loader = new THREE.GLTFLoader();
+    const loader = new GLTFLoader();
 
     // Показываем индикатор загрузки для больших моделей
     showLoadingIndicator();
@@ -78,6 +124,13 @@ function loadModel() {
             console.log('Model loaded successfully');
             model = gltf.scene;
 
+            // Применяем цвет если указан
+            const modelColor = getModelColor();
+            if (modelColor) {
+                applyModelColor(model, modelColor);
+                console.log('Model color applied:', modelColor);
+            }
+
             // Центрирование
             const box = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
@@ -87,7 +140,16 @@ function loadModel() {
             model.position.z -= center.z;
 
             scene.add(model);
-            addEdgesToObject(model);
+
+            // Включаем тени для всех мешей модели
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true; // false - Модель не получает тени (только отбрасывает)
+                }
+            });
+
+            // addEdgesToObject(model); // Наносим ребра на кромки
             initCuttingTool(scene, model, renderer);
 
             createAdaptiveGrid(scene);
@@ -268,29 +330,8 @@ function animate() {
     }
 }
 
-// Ждем загрузки THREE.js
-function waitForThreeJS() {
-    if (typeof THREE !== 'undefined' &&
-        typeof THREE.OrbitControls !== 'undefined' &&
-        typeof THREE.GLTFLoader !== 'undefined') {
-
-        const modelPath = getModelPath();
-        if (!modelPath) {
-            setTimeout(waitForThreeJS, 100);
-            return;
-        }
-        init();
-    } else {
-        setTimeout(waitForThreeJS, 100);
-    }
-}
-
 // Запускаем инициализацию
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', waitForThreeJS);
-} else {
-    waitForThreeJS();
-}
+init();
 
 // Глобальная функция resize с проверкой загрузки
 window.onWindowResize = function () {

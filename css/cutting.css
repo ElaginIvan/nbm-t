@@ -293,6 +293,7 @@ p {
     border-radius: 6px;
     padding: 10px;
     margin-top: 10px;
+    
 }
 
 .summary h3,
@@ -307,6 +308,7 @@ p {
 .summary p {
     margin: 4px 0;
     font-size: 14px;
+    align-items: normal;
 }
 
 .summary strong {
@@ -321,13 +323,12 @@ p {
     width: 50px;
     fill: var(--text-color);
     position: relative;
-    width: 710px;
     left: 50%;
     transform: translateX(-50%);
     margin-bottom: 20px;
 }
 
-.empty-state h3, p {
+.empty-state .info-start {
     display: flex;
     justify-content: center;
     align-items: center;
