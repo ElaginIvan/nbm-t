@@ -1,8 +1,15 @@
-import { DataService } from './dataService.js';
-
 /**
- * Утилиты для работы с DOM
+ * Gallery Module
+ * Отвечает за отображение и управление галереей проектов
  */
+
+import { DataService } from './dataService.js';
+import { projectStore } from './store.js';
+
+// ============================================================
+// Утилиты для работы с DOM
+// ============================================================
+
 const DomUtils = {
     /**
      * Создает HTML элемент карточки проекта
@@ -16,10 +23,10 @@ const DomUtils = {
 
         card.innerHTML = `
             <div class="model-preview no-save">
-                <img src="${project.previewImage}" alt="${project.name}" 
+                <img src="${project.previewImage}" alt="${project.name}"
                      onerror="this.src='https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400&h=300&fit=crop'">
             </div>
-            
+
             <div class="model-info">
                 <h3>${project.name}</h3>
                 <p class="model-description">${project.description}</p>
@@ -50,9 +57,10 @@ const DomUtils = {
     }
 };
 
-/**
- * Обработчики событий
- */
+// ============================================================
+// Обработчики событий
+// ============================================================
+
 const EventHandlers = {
     /**
      * Обработчик клика по карточке проекта
@@ -79,9 +87,10 @@ const EventHandlers = {
     }
 };
 
-/**
- * Основной модуль галереи
- */
+// ============================================================
+// Основной модуль галереи
+// ============================================================
+
 export const Gallery = {
     /**
      * Инициализирует галерею
@@ -89,16 +98,26 @@ export const Gallery = {
     async init() {
         try {
             const gridContainer = document.getElementById('models-grid');
-            if (!gridContainer) return;
+            if (!gridContainer) {
+                console.log('Gallery container not found, skipping initialization');
+                return;
+            }
 
             // Загружаем проекты
             const projects = await DataService.loadProjects();
+
+            if (projects.length === 0) {
+                this.showNoProjectsMessage();
+                return;
+            }
 
             // Рендерим проекты
             DomUtils.renderProjects(projects, gridContainer);
 
             // Добавляем обработчики событий
             this.addEventListeners();
+
+            console.log('Gallery initialized with', projects.length, 'projects');
 
         } catch (error) {
             console.error('Error initializing gallery:', error);
@@ -126,6 +145,7 @@ export const Gallery = {
      * @param {string} projectId - ID проекта
      */
     openProject(projectId) {
+        // Сохраняем в store и localStorage
         DataService.setSelectedProject(projectId);
         window.location.href = 'project.html';
     },
@@ -138,8 +158,8 @@ export const Gallery = {
         if (gridContainer) {
             gridContainer.innerHTML = `
                 <div class="error-message" style="
-                    grid-column: 1/-1; 
-                    text-align: center; 
+                    grid-column: 1/-1;
+                    text-align: center;
                     padding: 40px;
                     color: #666;
                 ">
@@ -149,12 +169,61 @@ export const Gallery = {
                 </div>
             `;
         }
+    },
+
+    /**
+     * Показывает сообщение когда проектов нет
+     */
+    showNoProjectsMessage() {
+        const gridContainer = document.getElementById('models-grid');
+        if (gridContainer) {
+            gridContainer.innerHTML = `
+                <div class="empty-message" style="
+                    grid-column: 1/-1;
+                    text-align: center;
+                    padding: 40px;
+                    color: #666;
+                ">
+                    <i class="fas fa-folder-open" style="font-size: 48px; margin-bottom: 20px;"></i>
+                    <h3>Проекты не найдены</h3>
+                    <p>Список проектов пуст.</p>
+                </div>
+            `;
+        }
+    },
+
+    /**
+     * Обновляет галерею с новыми данными
+     * @param {Array} projects - Массив проектов
+     */
+    update(projects) {
+        const gridContainer = document.getElementById('models-grid');
+        if (gridContainer) {
+            DomUtils.renderProjects(projects, gridContainer);
+            this.addEventListeners();
+        }
+    },
+
+    /**
+     * Получает текущие проекты из store
+     * @returns {Array|null}
+     */
+    getProjects() {
+        return projectStore.getData();
     }
 };
 
-// Автоматическая инициализация при загрузке документа
+// ============================================================
+// Автоматическая инициализация
+// ============================================================
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => Gallery.init());
 } else {
     Gallery.init();
 }
+
+// Экспортируем для внешнего доступа
+window.Gallery = Gallery;
+
+export default Gallery;

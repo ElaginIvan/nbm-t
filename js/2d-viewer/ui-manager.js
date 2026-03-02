@@ -1,6 +1,10 @@
 /**
  * Модуль управления UI элементами
+ * Интегрирован с store
  */
+
+import { uiStore, drawingStore } from '../store.js';
+
 export const UIManager = {
     /**
      * Обновляет отображение в зависимости от режима
@@ -29,6 +33,9 @@ export const UIManager = {
                 placeholder.style.display = 'block';
             }
         }
+
+        // Сохраняем режим в store
+        uiStore.setCurrentMode(mode);
     },
 
     /**
@@ -92,9 +99,12 @@ export const UIManager = {
      * Обновляет индикатор текущего чертежа
      */
     updateDrawingIndicator() {
-        if (!window.currentDrawings) return;
+        // Получаем данные из DrawingLoader
+        const drawingLoader = window.DrawingLoader;
+        if (!drawingLoader || !drawingLoader.currentDrawings) return;
 
-        const { files, currentIndex } = window.currentDrawings;
+        const { files, currentIndex } = drawingLoader.currentDrawings;
+
         const currentEl = document.querySelector('.current-sheet');
         const totalEl = document.querySelector('.total-sheets');
         const prevBtn = document.querySelector('.prev-drawing');
@@ -111,4 +121,34 @@ export const UIManager = {
             if (nextBtn) nextBtn.style.display = 'flex';
         }
     },
+
+    /**
+     * Показывает индикатор загрузки
+     */
+    showLoadingIndicator() {
+        const placeholder = document.getElementById('drawing-placeholder');
+        if (placeholder) {
+            placeholder.innerHTML = `
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Загрузка чертежа...</p>
+            `;
+            placeholder.style.display = 'block';
+        }
+    },
+
+    /**
+     * Показывает сообщение об ошибке
+     */
+    showError(message) {
+        const placeholder = document.getElementById('drawing-placeholder');
+        if (placeholder) {
+            placeholder.innerHTML = `
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>${message}</p>
+            `;
+            placeholder.style.display = 'block';
+        }
+    }
 };
+
+export default UIManager;

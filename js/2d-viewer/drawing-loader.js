@@ -1,6 +1,10 @@
 /**
  * Модуль загрузки и управления чертежами
+ * Интегрирован с drawingStore
  */
+
+import { drawingStore } from '../store.js';
+
 export const DrawingLoader = {
     currentDrawings: null,
 
@@ -10,51 +14,50 @@ export const DrawingLoader = {
     async loadDrawing(designation, projectId) {
         if (!designation || !projectId) {
             console.warn('Cannot load drawing: no designation or project ID');
-            return;
+            return false;
         }
 
         const cleanDesignation = designation.replace(/:\d+$/, '').trim();
         console.log('🔍 Поиск чертежей для:', cleanDesignation);
 
+        // Сохраняем текущую деталь в store
+        drawingStore.setCurrentPart(designation);
+
         const drawings = await this.findDrawingsByPattern(cleanDesignation, projectId);
 
         if (drawings.length === 0) {
             this.showNoDrawingFound(cleanDesignation);
-            
-            // Очищаем глобальное состояние
-            window.currentDrawings = null;
+
+            // Очищаем состояние
+            drawingStore.setCurrentPart(null);
             this.currentDrawings = null;
-            
+
             // Удаляем элементы управления
             if (window.UIManager) {
                 window.UIManager.removeMultiDrawingControls();
             }
-            
+
             return false;
         }
 
         console.log(`✅ Найдено чертежей: ${drawings.length}`, drawings);
 
-        // Сохраняем состояние в обоих местах для совместимости
+        // Сохраняем состояние
         this.currentDrawings = {
             files: drawings,
             currentIndex: 0,
             designation: cleanDesignation
         };
-        
-        window.currentDrawings = this.currentDrawings;
 
         if (drawings.length === 1) {
             this.loadSingleDrawing(drawings[0]);
-            
-            // Для одного чертежа удаляем навигационные кнопки
+
             if (window.UIManager) {
                 window.UIManager.removeMultiDrawingControls();
             }
         } else {
             this.loadMultipleDrawings(drawings, cleanDesignation);
-            
-            // Для нескольких чертежей создаем навигацию
+
             if (window.UIManager) {
                 window.UIManager.createMultiDrawingControls(this);
             }
@@ -178,15 +181,11 @@ export const DrawingLoader = {
      * Загружает несколько чертежей
      */
     loadMultipleDrawings(drawings, designation) {
-        // Сохраняем в глобальном объекте
-        window.currentDrawings = {
+        this.currentDrawings = {
             files: drawings,
             currentIndex: 0,
             designation: designation
         };
-        
-        // Синхронизируем с локальным состоянием
-        this.currentDrawings = window.currentDrawings;
 
         this.loadDrawingFromList(0);
     },
@@ -195,27 +194,22 @@ export const DrawingLoader = {
      * Загружает чертеж из списка по индексу
      */
     loadDrawingFromList(index) {
-        if (!window.currentDrawings || !window.currentDrawings.files[index]) {
+        if (!this.currentDrawings || !this.currentDrawings.files[index]) {
             return;
         }
 
-        const drawing = window.currentDrawings.files[index];
+        const drawing = this.currentDrawings.files[index];
         const imageElement = document.getElementById('drawing-image');
         const placeholder = document.getElementById('drawing-placeholder');
 
         placeholder.innerHTML = `
             <i class="fas fa-spinner fa-spin"></i>
-            <p>Загрузка листа ${index + 1} из ${window.currentDrawings.files.length}...</p>
+            <p>Загрузка листа ${index + 1} из ${this.currentDrawings.files.length}...</p>
         `;
         placeholder.style.display = 'block';
         imageElement.style.display = 'none';
 
-        window.currentDrawings.currentIndex = index;
-        
-        // Синхронизируем с локальным состоянием
-        if (this.currentDrawings) {
-            this.currentDrawings.currentIndex = index;
-        }
+        this.currentDrawings.currentIndex = index;
 
         const img = new Image();
         img.onload = () => {
@@ -223,8 +217,7 @@ export const DrawingLoader = {
             imageElement.style.display = 'block';
             placeholder.style.display = 'none';
             console.log(`✅ Лист ${index + 1} загружен:`, drawing.name);
-            
-            // Обновляем индикатор после загрузки
+
             if (window.UIManager) {
                 window.UIManager.updateDrawingIndicator();
             }
@@ -260,11 +253,27 @@ export const DrawingLoader = {
      * Переключает между чертежами
      */
     switchDrawing(direction) {
-        if (!window.currentDrawings) return;
+        if (!this.currentDrawings) return;
 
-        const { files, currentIndex } = window.currentDrawings;
+        const { files, currentIndex } = this.currentDrawings;
         const newIndex = (currentIndex + direction + files.length) % files.length;
 
         this.loadDrawingFromList(newIndex);
+    },
+
+    /**
+     * Получает текущий индекс чертежа
+     */
+    getCurrentIndex() {
+        return this.currentDrawings?.currentIndex || 0;
+    },
+
+    /**
+     * Получает количество чертежей
+     */
+    getDrawingsCount() {
+        return this.currentDrawings?.files.length || 0;
     }
 };
+
+export default DrawingLoader;

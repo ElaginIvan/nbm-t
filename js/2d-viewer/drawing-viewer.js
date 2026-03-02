@@ -1,10 +1,12 @@
 /**
  * Основной модуль 2D просмотрщика
  */
+
 import { InputHandlers } from './input-handlers.js';
 import { DrawingLoader } from './drawing-loader.js';
 import { ZoomManager } from './zoom-manager.js';
 import { UIManager } from './ui-manager.js';
+import { uiStore, drawingStore } from '../store.js';
 
 export const DrawingViewer = {
     currentMode: '3D',
@@ -15,9 +17,18 @@ export const DrawingViewer = {
      */
     init() {
         this.currentProjectId = this.getProjectId();
-        this.setupCursors(); // Добавляем настройку курсоров
+        this.setupCursors();
         this.bindEvents();
         UIManager.updateToggleButton(this.currentMode);
+        
+        // Подписываемся на изменения режима из store
+        uiStore.subscribeCurrentMode((mode) => {
+            if (mode && mode !== this.currentMode) {
+                this.currentMode = mode;
+                ZoomManager.currentMode = mode;
+            }
+        });
+        
         console.log('2D Viewer initialized for project:', this.currentProjectId);
     },
 
@@ -29,7 +40,7 @@ export const DrawingViewer = {
         const drawingWrapper = document.querySelector('.drawing-wrapper');
 
         if (imageElement) {
-            imageElement.style.cursor = 'grab'; // Курсор "рука" по умолчанию
+            imageElement.style.cursor = 'grab';
         }
 
         if (drawingWrapper) {
@@ -94,13 +105,13 @@ export const DrawingViewer = {
         const oldMode = this.currentMode;
         this.currentMode = this.currentMode === '3D' ? '2D' : '3D';
 
-        // Обновляем currentMode в ZoomManager для проверок в обработчиках
+        // Обновляем currentMode в ZoomManager и store
         ZoomManager.currentMode = this.currentMode;
+        uiStore.setCurrentMode(this.currentMode);
 
         UIManager.updateView(this.currentMode);
         UIManager.updateToggleButton(this.currentMode);
 
-        // Устанавливаем курсоры в зависимости от режима
         this.setupCursors();
 
         // Уведомляем другие модули
@@ -123,10 +134,8 @@ export const DrawingViewer = {
             }
         }
 
-        // Обновляем Three.js - используем безопасную проверку
-        // Вместо проверки activeContainer, вызываем onWindowResize если он существует
+        // Обновляем Three.js
         if (typeof window.onWindowResize === 'function') {
-            // Небольшая задержка для гарантии, что DOM обновился
             setTimeout(() => {
                 try {
                     window.onWindowResize();
@@ -143,9 +152,13 @@ export const DrawingViewer = {
     async loadDrawing(designation) {
         this.refreshProjectId();
 
+        // Сохраняем текущую деталь в store
+        drawingStore.setCurrentPart(designation);
+
         const success = await DrawingLoader.loadDrawing(designation, this.currentProjectId);
 
-        if (success && window.currentDrawings?.files.length > 1) {
+        // Используем DrawingLoader.currentDrawings вместо window.currentDrawings
+        if (success && DrawingLoader.currentDrawings?.files.length > 1) {
             UIManager.createMultiDrawingControls(DrawingLoader);
         } else {
             UIManager.removeMultiDrawingControls();
@@ -159,6 +172,13 @@ export const DrawingViewer = {
      */
     getCurrentMode() {
         return this.currentMode;
+    },
+
+    /**
+     * Получает текущую деталь
+     */
+    getCurrentPart() {
+        return drawingStore.getCurrentPart();
     }
 };
 
@@ -175,3 +195,5 @@ window.ZoomManager = ZoomManager;
 window.DrawingLoader = DrawingLoader;
 window.InputHandlers = InputHandlers;
 window.UIManager = UIManager;
+
+export default DrawingViewer;

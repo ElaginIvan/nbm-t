@@ -154,6 +154,8 @@
     </script>
 
     <!-- Основные скрипты -->
+    <!-- Store должен быть загружен первым -->
+    <script src="js/store.js" type="module"></script>
     <script src="js/dataService.js" type="module"></script>
     <script src="js/project.js" type="module"></script>
 
@@ -163,7 +165,7 @@
     <script src="js/fullscreen-manager.js" type="module"></script>
     <script src="js/resize-handler.js" type="module"></script>
 
-    <script src="js/cutting.js"></script>
+    <script src="js/cutting.js" type="module"></script>
 </body>
 
 </html>

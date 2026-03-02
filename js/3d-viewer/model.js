@@ -1,5 +1,32 @@
-// Основные переменные
-let scene, camera, renderer, controls, model, gridHelper;
+/**
+ * 3D Viewer Module
+ * Отвечает за инициализацию и рендеринг 3D сцены
+ */
+
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/GLTFLoader.js';
+
+import { initCuttingTool } from './model-cut.js';
+import { getModelPath, showErrorMessage } from './model-utils.js';
+import { setupLights } from './model-lights.js';
+import { createAdaptiveGrid, updateGridPosition, checkCameraOrientation } from './model-grid.js';
+import { addEdgesToObject } from './model-geometry.js';
+import { setupCamera } from './model-camera.js';
+import { onWindowResize as handleWindowResize, initResizeListener } from './model-WindowResize.js';
+
+import { modelStore, projectStore, specificationStore } from '../store.js';
+import { SpecificationService } from '../services/specificationService.js';
+
+// ============================================================
+// Состояние модуля (локальное, не глобальное)
+// ============================================================
+let scene = null;
+let camera = null;
+let renderer = null;
+let controls = null;
+let model = null;
+let gridHelper = null;
+
 let isGridVisible = true;
 let originalGridOpacity = 0.5;
 
@@ -7,23 +34,15 @@ let originalGridOpacity = 0.5;
  * Глобальная константа цвета модели
  * Установите null чтобы использовать цвет из projects.json или цвет модели по умолчанию
  */
-// Зеленый - 0x006629, Желтый - 0xa8b800, Синий - 0x0058bd
-const DEFAULT_MODEL_COLOR = null; // Например: '#FF5733' или 0xFF5733
-
-// Импорты
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/GLTFLoader.js';
-import { initCuttingTool } from './model-cut.js';
-import { getModelPath, showErrorMessage } from './model-utils.js';
-import { setupLights } from './model-lights.js';
-import { createAdaptiveGrid, updateGridPosition, checkCameraOrientation } from './model-grid.js';
-import { addEdgesToObject } from './model-geometry.js';
-import { setupCamera } from './model-camera.js';
-import { onWindowResize, initResizeListener } from './model-WindowResize.js';
+const DEFAULT_MODEL_COLOR = null;
 
 // Флаг для отслеживания состояния загрузки
 let modelLoaded = false;
 let modelLoadCallbacks = [];
+
+// ============================================================
+// Вспомогательные функции
+// ============================================================
 
 /**
  * Вызывается когда модель гарантированно загружена
@@ -37,53 +56,19 @@ function onModelLoaded(callback) {
 }
 
 /**
- * Инициализирует сцену
- */
-function init() {
-    const container = document.getElementById('model-container');
-    if (!container) {
-        console.error('Model container not found');
-        return;
-    }
-
-    const modelPath = getModelPath();
-    console.log('Model path:', modelPath);
-
-    if (!modelPath) {
-        showErrorMessage('Путь к модели не указан. Проверьте данные проекта.');
-        return;
-    }
-
-    scene = new THREE.Scene();
-
-    const canvas = document.getElementById('viewer');
-    ({ camera, renderer, controls } = setupCamera(container, canvas));
-
-    setupLights(scene);
-    loadModel();
-    animate();
-}
-
-/**
  * Получает цвет модели из projects.json или глобальной константы
  * @returns {string|null} Цвет в формате hex или null
  */
 function getModelColor() {
-    // Сначала проверяем глобальную константу
     if (DEFAULT_MODEL_COLOR) {
         return DEFAULT_MODEL_COLOR;
     }
 
-    // Затем проверяем projects.json
-    const projectData = document.getElementById('project-data');
-    if (projectData) {
-        const color = projectData.getAttribute('data-model-color');
-        if (color) {
-            return color;
-        }
+    const project = projectStore.getData();
+    if (project?.modelColor) {
+        return project.modelColor;
     }
 
-    // Если цвет не указан, возвращаем null (используется цвет модели по умолчанию)
     return null;
 }
 
@@ -99,152 +84,6 @@ function applyModelColor(object, color) {
             child.material.color = newColor;
         }
     });
-}
-
-/**
- * Загружает модель с гарантией завершения
- */
-function loadModel() {
-    const modelPath = getModelPath();
-    console.log('Loading model from:', modelPath);
-
-    if (!modelPath) {
-        showErrorMessage('Путь к модели не указан');
-        return;
-    }
-
-    const loader = new GLTFLoader();
-
-    // Показываем индикатор загрузки для больших моделей
-    showLoadingIndicator();
-
-    loader.load(
-        modelPath,
-        function (gltf) {
-            console.log('Model loaded successfully');
-            model = gltf.scene;
-
-            // Применяем цвет если указан
-            const modelColor = getModelColor();
-            if (modelColor) {
-                applyModelColor(model, modelColor);
-                console.log('Model color applied:', modelColor);
-            }
-
-            // Центрирование
-            const box = new THREE.Box3().setFromObject(model);
-            const center = box.getCenter(new THREE.Vector3());
-
-            model.position.x -= center.x;
-            model.position.y -= center.y;
-            model.position.z -= center.z;
-
-            scene.add(model);
-
-            // Включаем тени для всех мешей модели
-            model.traverse((child) => {
-                if (child.isMesh) {
-                    child.castShadow = true;
-                    child.receiveShadow = true; // false - Модель не получает тени (только отбрасывает)
-                }
-            });
-
-            // addEdgesToObject(model); // Наносим ребра на кромки
-            initCuttingTool(scene, model, renderer);
-
-            createAdaptiveGrid(scene);
-            gridHelper = scene.getObjectByName('adaptiveGrid');
-
-            if (gridHelper) {
-                updateGridPosition(model, gridHelper);
-            }
-
-            const size = box.getSize(new THREE.Vector3());
-            const maxSize = Math.max(size.x, size.y, size.z);
-            const distance = maxSize * 2;
-
-            camera.position.set(distance, distance * 0.7, distance);
-            camera.lookAt(0, 0, 0);
-            controls.target.set(0, 0, 0);
-            controls.update();
-
-            onWindowResize(camera, renderer, gridHelper, model);
-            initResizeListener(camera, renderer, gridHelper, model);
-
-            // Обработчик двойного клика на canvas, для сброса вида
-            const canvas = document.getElementById('viewer');
-            canvas.addEventListener('dblclick', resetView);
-
-            // Устанавливаем флаг загрузки и делаем модель глобальной
-            modelLoaded = true;
-            window.model = model;
-
-            // Скрываем индикатор загрузки
-            hideLoadingIndicator();
-
-            // Вызываем все сохраненные колбэки
-            modelLoadCallbacks.forEach(callback => {
-                try {
-                    callback(model);
-                } catch (e) {
-                    console.error('Error in model load callback:', e);
-                }
-            });
-            modelLoadCallbacks = [];
-
-            // Диспатчим событие
-            window.dispatchEvent(new CustomEvent('modelLoaded', {
-                detail: { model, scene, camera, controls }
-            }));
-
-            // Передаем структуру модели
-            if (window.Specification && typeof window.Specification.saveModelStructure === 'function') {
-                // Даем небольшой таймаут для гарантии, что все готово
-                setTimeout(() => {
-                    window.Specification.saveModelStructure(model);
-                }, 100);
-            }
-
-            console.log('✅ Model fully loaded and ready');
-        },
-        function (xhr) {
-            // Обновляем прогресс для больших моделей
-            const percent = Math.round(xhr.loaded / xhr.total * 100);
-            console.log(percent + '% loaded');
-            updateLoadingProgress(percent);
-        },
-        function (error) {
-            console.error('Error loading model:', error);
-            hideLoadingIndicator();
-            showErrorMessage('Не удалось загрузить модель. Проверьте путь к файлу: ' + modelPath);
-        }
-    );
-}
-
-// Функция сброса вида
-function resetView() {
-    if (!model || !camera || !controls) return;
-
-    console.log('🔄 Resetting 3D view');
-
-    // Получаем размеры модели для правильного позиционирования камеры
-    const box = new THREE.Box3().setFromObject(model);
-    const size = box.getSize(new THREE.Vector3());
-    const maxSize = Math.max(size.x, size.y, size.z);
-    const distance = maxSize * 2; // Та же формула, что и при загрузке
-
-    // Сбрасываем позицию камеры
-    camera.position.set(distance, distance * 0.7, distance);
-    camera.lookAt(0, 0, 0);
-
-    // Сбрасываем target controls
-    controls.target.set(0, 0, 0);
-    controls.update();
-
-    // Обновляем сетку если есть
-    if (gridHelper) {
-        updateGridPosition(model, gridHelper);
-    }
 }
 
 /**
@@ -314,6 +153,184 @@ function hideLoadingIndicator() {
     }
 }
 
+// ============================================================
+// Основные функции
+// ============================================================
+
+/**
+ * Инициализирует сцену
+ */
+function init() {
+    const container = document.getElementById('model-container');
+    if (!container) {
+        console.error('Model container not found');
+        return;
+    }
+
+    const modelPath = getModelPath();
+    console.log('Model path:', modelPath);
+
+    if (!modelPath) {
+        showErrorMessage('Путь к модели не указан. Проверьте данные проекта.');
+        return;
+    }
+
+    scene = new THREE.Scene();
+
+    const canvas = document.getElementById('viewer');
+    const cameraSetup = setupCamera(container, canvas);
+    camera = cameraSetup.camera;
+    renderer = cameraSetup.renderer;
+    controls = cameraSetup.controls;
+
+    setupLights(scene);
+    loadModel();
+    animate();
+}
+
+/**
+ * Загружает модель с гарантией завершения
+ */
+function loadModel() {
+    const modelPath = getModelPath();
+    console.log('Loading model from:', modelPath);
+
+    if (!modelPath) {
+        showErrorMessage('Путь к модели не указан');
+        return;
+    }
+
+    const loader = new GLTFLoader();
+
+    showLoadingIndicator();
+
+    loader.load(
+        modelPath,
+        function (gltf) {
+            console.log('Model loaded successfully');
+            model = gltf.scene;
+
+            // Применяем цвет если указан
+            const modelColor = getModelColor();
+            if (modelColor) {
+                applyModelColor(model, modelColor);
+                console.log('Model color applied:', modelColor);
+            }
+
+            // Центрирование
+            const box = new THREE.Box3().setFromObject(model);
+            const center = box.getCenter(new THREE.Vector3());
+
+            model.position.x -= center.x;
+            model.position.y -= center.y;
+            model.position.z -= center.z;
+
+            scene.add(model);
+
+            // Включаем тени для всех мешей модели
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+
+            initCuttingTool(scene, model, renderer);
+
+            createAdaptiveGrid(scene);
+            gridHelper = scene.getObjectByName('adaptiveGrid');
+
+            if (gridHelper) {
+                updateGridPosition(model, gridHelper);
+            }
+
+            const size = box.getSize(new THREE.Vector3());
+            const maxSize = Math.max(size.x, size.y, size.z);
+            const distance = maxSize * 2;
+
+            camera.position.set(distance, distance * 0.7, distance);
+            camera.lookAt(0, 0, 0);
+            controls.target.set(0, 0, 0);
+            controls.update();
+
+            handleWindowResize(camera, renderer, gridHelper, model);
+            initResizeListener(camera, renderer, gridHelper, model);
+
+            // Обработчик двойного клика на canvas, для сброса вида
+            const canvas = document.getElementById('viewer');
+            canvas.addEventListener('dblclick', resetView);
+
+            // Обновляем store
+            modelStore.setObject(model);
+            modelStore.setLoaded(true);
+            modelStore.setPath(modelPath);
+
+            modelLoaded = true;
+
+            hideLoadingIndicator();
+
+            // Вызываем все сохраненные колбэки
+            modelLoadCallbacks.forEach(callback => {
+                try {
+                    callback(model);
+                } catch (e) {
+                    console.error('Error in model load callback:', e);
+                }
+            });
+            modelLoadCallbacks = [];
+
+            // Диспатчим событие
+            window.dispatchEvent(new CustomEvent('modelLoaded', {
+                detail: { model, scene, camera, controls }
+            }));
+
+            // Сохраняем структуру модели через сервис
+            const projectId = projectStore.getCurrentId();
+            if (projectId) {
+                setTimeout(() => {
+                    SpecificationService.saveModelStructure(model, projectId);
+                }, 100);
+            }
+
+            console.log('✅ Model fully loaded and ready');
+        },
+        function (xhr) {
+            const percent = Math.round(xhr.loaded / xhr.total * 100);
+            console.log(percent + '% loaded');
+            updateLoadingProgress(percent);
+        },
+        function (error) {
+            console.error('Error loading model:', error);
+            hideLoadingIndicator();
+            showErrorMessage('Не удалось загрузить модель. Проверьте путь к файлу: ' + modelPath);
+        }
+    );
+}
+
+/**
+ * Функция сброса вида
+ */
+function resetView() {
+    if (!model || !camera || !controls) return;
+
+    console.log('🔄 Resetting 3D view');
+
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const maxSize = Math.max(size.x, size.y, size.z);
+    const distance = maxSize * 2;
+
+    camera.position.set(distance, distance * 0.7, distance);
+    camera.lookAt(0, 0, 0);
+
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+    if (gridHelper) {
+        updateGridPosition(model, gridHelper);
+    }
+}
+
 /**
  * Анимация
  */
@@ -334,7 +351,7 @@ function animate() {
 function waitForProjectData() {
     const projectData = document.getElementById('project-data');
     const modelPath = projectData?.getAttribute('data-model-path');
-    
+
     if (modelPath) {
         console.log('Project data loaded, initializing viewer...');
         init();
@@ -353,29 +370,36 @@ if (document.readyState === 'loading') {
 // Глобальная функция resize с проверкой загрузки
 window.onWindowResize = function () {
     if (camera && renderer && gridHelper && model) {
-        onWindowResize(camera, renderer, gridHelper, model);
+        handleWindowResize(camera, renderer, gridHelper, model);
     } else {
-        // Ждем загрузки
         const checkInterval = setInterval(() => {
             if (camera && renderer && gridHelper && model) {
                 clearInterval(checkInterval);
-                onWindowResize(camera, renderer, gridHelper, model);
+                handleWindowResize(camera, renderer, gridHelper, model);
             }
         }, 200);
     }
 };
 
-// Экспортируем функции
-window.ModelViewer = {
+// ============================================================
+// Экспорт
+// ============================================================
+
+export const ModelViewer = {
     init,
     loadModel,
     addEdgesToObject,
-    showErrorMessage: window.showErrorMessage,
+    showErrorMessage,
     getModel: () => model,
     getScene: () => scene,
     getCamera: () => camera,
     getControls: () => controls,
     isModelLoaded: () => modelLoaded,
     onModelLoaded: onModelLoaded,
-    resetView: resetView
+    resetView
 };
+
+// Экспортируем для совместимости
+window.ModelViewer = ModelViewer;
+
+export default ModelViewer;

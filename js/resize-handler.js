@@ -1,34 +1,59 @@
-// resize-handler.js
+/**
+ * Resize Handler Module
+ * Отвечает за изменение размера панели информации и переключение вкладок
+ */
+
+import { uiStore, specificationStore } from './store.js';
+import { SpecificationService } from './services/specificationService.js';
+
+// ============================================================
+// Константы
+// ============================================================
+
+const DEFAULT_HEIGHT = 300;
+const MIN_HEIGHT = 60;
+const RESIZE_THROTTLE_DELAY = 50;
+
+// ============================================================
+// Класс ResizeHandler
+// ============================================================
+
 export class ResizeHandler {
     constructor() {
         this.handle = document.getElementById('resize-handle');
         this.infoPanel = document.querySelector('.info-panel');
         this.modelContainer = document.getElementById('model-container');
         this.drawingContainer = document.getElementById('drawing-container');
-
         this.viewToggleBtn = document.getElementById('view-toggle-btn');
 
         this.isResizing = false;
         this.startY = 0;
         this.startHeight = 0;
-        this.minHeight = 60;
-        this.maxHeight = window.innerHeight - 60;
+        this.minHeight = MIN_HEIGHT;
+        this.maxHeight = window.innerHeight - MIN_HEIGHT;
 
         // Для троттлинга
         this.lastResizeCall = 0;
-        this.resizeThrottleDelay = 50;
+        this.resizeThrottleDelay = RESIZE_THROTTLE_DELAY;
         this.resizeTimeout = null;
 
-        this.restoreHeight();
+        // Инициализируем из store или localStorage
+        this.currentView = uiStore.getCurrentView() || this.restoreViewState();
+        
         this.init();
         this.initViewToggle();
-        this.restoreViewState();
+        this.restoreHeight();
+        this.showCurrentView();
+        this.updateToggleIcon();
     }
+
+    // ============================================================
+    // Инициализация
+    // ============================================================
 
     init() {
         // Обработчики для всей области handle (кроме кнопки)
         this.handle.addEventListener('mousedown', (e) => {
-            // Если клик не на кнопке - начинаем ресайз
             if (!this.isToggleButton(e.target)) {
                 this.startResize(e);
             }
@@ -40,7 +65,6 @@ export class ResizeHandler {
             const touch = e.touches[0];
             const target = document.elementFromPoint(touch.clientX, touch.clientY);
 
-            // Если касание не на кнопке - начинаем ресайз
             if (!this.isToggleButton(target)) {
                 e.preventDefault();
                 this.startResizeTouch(e);
@@ -70,9 +94,21 @@ export class ResizeHandler {
         document.addEventListener('touchcancel', () => {
             if (this.isResizing) this.stopResize();
         });
+
+        // Подписка на изменения UI store
+        uiStore.subscribeCurrentView((view) => {
+            if (view && view !== this.currentView) {
+                this.currentView = view;
+                this.showCurrentView();
+                this.updateToggleIcon();
+            }
+        });
     }
 
-    // Проверка, является ли элемент кнопкой переключения
+    // ============================================================
+    // Обработчики resizing
+    // ============================================================
+
     isToggleButton(element) {
         return element === this.viewToggleBtn ||
             element.closest('#view-toggle-btn') === this.viewToggleBtn;
@@ -146,6 +182,9 @@ export class ResizeHandler {
         newHeight = Math.max(this.minHeight, Math.min(this.maxHeight, newHeight));
         this.infoPanel.style.height = `${newHeight}px`;
 
+        // Сохраняем в store
+        uiStore.setInfoPanelHeight(newHeight);
+
         const handleHeight = this.handle.offsetHeight || 20;
         const containerHeight = window.innerHeight - newHeight - handleHeight - 80;
         const minContainerHeight = 100;
@@ -178,63 +217,79 @@ export class ResizeHandler {
         this.saveHeight();
     }
 
+    // ============================================================
+    // Сохранение/восстановление высоты
+    // ============================================================
+
     saveHeight() {
         const height = parseInt(getComputedStyle(this.infoPanel).height, 10);
         localStorage.setItem('infoPanelHeight', height);
+        uiStore.setInfoPanelHeight(height);
     }
 
     restoreHeight() {
-        const savedHeight = localStorage.getItem('infoPanelHeight');
+        // Сначала пробуем из store
+        let savedHeight = uiStore.getInfoPanelHeight();
+        
+        // Затем из localStorage
+        if (!savedHeight) {
+            savedHeight = localStorage.getItem('infoPanelHeight');
+        }
+        
         if (savedHeight) {
             const height = parseInt(savedHeight, 10);
             this.updateHeight(height);
         } else {
-            const defaultHeight = window.innerHeight * 0.6;
+            const defaultHeight = window.innerHeight * 0.4;
             this.updateHeight(defaultHeight);
         }
     }
 
-    // Инициализация кнопки переключения
+    // ============================================================
+    // Переключение вкладок
+    // ============================================================
+
     initViewToggle() {
         if (!this.viewToggleBtn) return;
 
-        this.currentView = 'specification';
         this.updateToggleIcon();
 
         // Обработчики для кнопки - с явным остановом всплытия
         this.viewToggleBtn.addEventListener('mousedown', (e) => {
-            e.stopPropagation(); // Останавливаем всплытие к родителю
+            e.stopPropagation();
         });
 
         this.viewToggleBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            e.stopPropagation(); // Останавливаем всплытие
+            e.stopPropagation();
             this.toggleView();
         });
 
         // Для мобильных устройств
         this.viewToggleBtn.addEventListener('touchstart', (e) => {
-            e.stopPropagation(); // Важно! Останавливаем всплытие
+            e.stopPropagation();
         }, { passive: true });
 
         this.viewToggleBtn.addEventListener('touchend', (e) => {
             e.preventDefault();
-            e.stopPropagation(); // Важно! Останавливаем всплытие
+            e.stopPropagation();
             this.toggleView();
         }, { passive: false });
 
         this.viewToggleBtn.addEventListener('touchcancel', (e) => {
             e.stopPropagation();
         });
-
-        this.showCurrentView();
     }
 
     toggleView() {
-        this.currentView = this.currentView === 'specification' ? 'cutting' : 'specification';
+        const newView = this.currentView === 'specification' ? 'cutting' : 'specification';
+        this.currentView = newView;
+        
+        // Сохраняем в store
+        uiStore.setCurrentView(newView);
+        
         this.showCurrentView();
         this.updateToggleIcon();
-        this.saveViewState();
     }
 
     showCurrentView() {
@@ -247,14 +302,17 @@ export class ResizeHandler {
             currentPane.classList.add('active');
         }
 
-        if (this.currentView === 'specification' && window.Specification && window.Specification.lastSelectedPart) {
+        // Восстанавливаем выделение если на вкладке спецификации
+        if (this.currentView === 'specification' && specificationStore.getSelectedPart()) {
             setTimeout(() => {
                 const rows = document.querySelectorAll('.part-row');
+                const selectedPart = specificationStore.getSelectedPart();
+                
                 rows.forEach(row => {
                     const partName = row.getAttribute('data-part-name');
-                    if (partName === window.Specification.lastSelectedPart) {
+                    if (partName === selectedPart) {
                         row.classList.add('active');
-                        window.Specification.highlightParts(partName, true);
+                        SpecificationService.highlightParts(partName, true);
                     } else {
                         row.classList.remove('active');
                     }
@@ -265,7 +323,6 @@ export class ResizeHandler {
 
     updateToggleIcon() {
         const icon = this.currentView === 'specification' ? 'cut' : 'list-alt';
-        
         this.viewToggleBtn.innerHTML = `<svg><use xlink:href="assets/icons/sprite.svg#${icon}"></use></svg>`;
     }
 
@@ -276,23 +333,25 @@ export class ResizeHandler {
     restoreViewState() {
         const savedView = localStorage.getItem('currentView');
         if (savedView === 'specification' || savedView === 'cutting') {
-            this.currentView = savedView;
-            this.showCurrentView();
-            this.updateToggleIcon();
+            return savedView;
         }
+        return 'specification';
     }
 
     setView(view) {
         if (view === 'specification' || view === 'cutting') {
             this.currentView = view;
+            uiStore.setCurrentView(view);
             this.showCurrentView();
             this.updateToggleIcon();
-            this.saveViewState();
         }
     }
 }
 
+// ============================================================
 // Автоматическая инициализация
+// ============================================================
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         window.resizeHandler = new ResizeHandler();
@@ -300,3 +359,5 @@ if (document.readyState === 'loading') {
 } else {
     window.resizeHandler = new ResizeHandler();
 }
+
+export default ResizeHandler;
