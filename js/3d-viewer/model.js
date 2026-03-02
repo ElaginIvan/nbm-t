@@ -330,8 +330,25 @@ function animate() {
     }
 }
 
-// Запускаем инициализацию
-init();
+// Запускаем инициализацию после загрузки DOM и данных проекта
+function waitForProjectData() {
+    const projectData = document.getElementById('project-data');
+    const modelPath = projectData?.getAttribute('data-model-path');
+    
+    if (modelPath) {
+        console.log('Project data loaded, initializing viewer...');
+        init();
+    } else {
+        console.log('Waiting for project data...');
+        setTimeout(waitForProjectData, 100);
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', waitForProjectData);
+} else {
+    waitForProjectData();
+}
 
 // Глобальная функция resize с проверкой загрузки
 window.onWindowResize = function () {
