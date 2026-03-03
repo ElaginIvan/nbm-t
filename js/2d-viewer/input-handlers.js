@@ -5,6 +5,14 @@
 
 import { uiStore, drawingStore } from '../store.js';
 
+/**
+ * Проверяет, активен ли 2D режим
+ * @returns {boolean}
+ */
+function is2DMode() {
+    return uiStore.getCurrentMode() === '2D';
+}
+
 export const InputHandlers = {
     isDragging: false,
     isZooming: false,
@@ -55,17 +63,10 @@ export const InputHandlers = {
     },
 
     /**
-     * Проверяет, активен ли 2D режим
-     */
-    is2DMode(drawingViewer) {
-        return drawingViewer?.currentMode === '2D' || uiStore.getCurrentMode() === '2D';
-    },
-
-    /**
      * Обработка нажатия кнопки мыши
      */
     handleMouseDown(e, drawingViewer, zoomManager) {
-        if (!this.is2DMode(drawingViewer)) return;
+        if (!is2DMode()) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -130,7 +131,7 @@ export const InputHandlers = {
      * Обработка колеса мыши
      */
     handleWheel(e, drawingViewer, zoomManager) {
-        if (!this.is2DMode(drawingViewer)) return;
+        if (!is2DMode()) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -172,7 +173,7 @@ export const InputHandlers = {
      * Начало касания
      */
     handleTouchStart(e, drawingViewer, zoomManager) {
-        if (!this.is2DMode(drawingViewer)) return;
+        if (!is2DMode()) return;
 
         if (e.touches.length === 2) {
             e.preventDefault();
@@ -210,7 +211,7 @@ export const InputHandlers = {
      * Движение пальцев
      */
     handleTouchMove(e, drawingViewer, zoomManager) {
-        if (!this.is2DMode(drawingViewer)) return;
+        if (!is2DMode()) return;
 
         if (this.isZooming && e.touches.length === 2) {
             e.preventDefault();
@@ -295,7 +296,7 @@ export const InputHandlers = {
      * Обработка двойного клика/нажатия для сброса зума
      */
     handleDoubleClick(e, drawingViewer, zoomManager) {
-        if (!this.is2DMode(drawingViewer)) return;
+        if (!is2DMode()) return;
 
         e.preventDefault();
         e.stopPropagation();

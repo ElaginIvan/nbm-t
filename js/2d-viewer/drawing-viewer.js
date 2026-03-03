@@ -8,28 +8,37 @@ import { ZoomManager } from './zoom-manager.js';
 import { UIManager } from './ui-manager.js';
 import { uiStore, drawingStore } from '../store.js';
 
+// Локальное состояние (не дублирует store)
+let currentProjectId = null;
+
+/**
+ * Получает текущий режим из store
+ * @returns {string} '3D' или '2D'
+ */
+function getCurrentMode() {
+    return uiStore.getCurrentMode() || '3D';
+}
+
 export const DrawingViewer = {
-    currentMode: '3D',
     currentProjectId: null,
 
     /**
      * Инициализация
      */
     init() {
-        this.currentProjectId = this.getProjectId();
+        currentProjectId = this.getProjectId();
         this.setupCursors();
         this.bindEvents();
-        UIManager.updateToggleButton(this.currentMode);
-        
+        UIManager.updateToggleButton(getCurrentMode());
+
         // Подписываемся на изменения режима из store
         uiStore.subscribeCurrentMode((mode) => {
-            if (mode && mode !== this.currentMode) {
-                this.currentMode = mode;
+            if (mode) {
                 ZoomManager.currentMode = mode;
             }
         });
-        
-        console.log('2D Viewer initialized for project:', this.currentProjectId);
+
+        console.log('2D Viewer initialized for project:', currentProjectId);
     },
 
     /**
@@ -61,11 +70,11 @@ export const DrawingViewer = {
      */
     refreshProjectId() {
         const newId = this.getProjectId();
-        if (newId !== this.currentProjectId) {
-            console.log('Project ID changed:', this.currentProjectId, '->', newId);
-            this.currentProjectId = newId;
+        if (newId !== currentProjectId) {
+            console.log('Project ID changed:', currentProjectId, '->', newId);
+            currentProjectId = newId;
         }
-        return this.currentProjectId;
+        return currentProjectId;
     },
 
     /**
@@ -84,53 +93,65 @@ export const DrawingViewer = {
         // Обработчики ввода - передаем this (DrawingViewer) и ZoomManager
         InputHandlers.initMouseHandlers(this, ZoomManager);
         InputHandlers.initTouchHandlers(this, ZoomManager);
-
-        // Клики по строкам таблицы
-        document.addEventListener('click', (e) => {
-            const partRow = e.target.closest('.part-row');
-            if (partRow) {
-                const partName = partRow.getAttribute('data-part-name');
-                if (partName && this.currentMode === '2D') {
-                    console.log('📋 Table row clicked in 2D mode:', partName);
-                    this.loadDrawing(partName);
-                }
-            }
-        });
     },
 
     /**
      * Переключает режим просмотра
      */
     toggleMode() {
-        const oldMode = this.currentMode;
-        this.currentMode = this.currentMode === '3D' ? '2D' : '3D';
+        const oldMode = getCurrentMode();
+        const newMode = oldMode === '3D' ? '2D' : '3D';
 
-        // Обновляем currentMode в ZoomManager и store
-        ZoomManager.currentMode = this.currentMode;
-        uiStore.setCurrentMode(this.currentMode);
+        // Обновляем режим в store и ZoomManager
+        uiStore.setCurrentMode(newMode);
+        ZoomManager.currentMode = newMode;
 
-        UIManager.updateView(this.currentMode);
-        UIManager.updateToggleButton(this.currentMode);
+        UIManager.updateView(newMode);
+        UIManager.updateToggleButton(newMode);
 
         this.setupCursors();
 
         // Уведомляем другие модули
         if (window.PanelManager) {
-            window.PanelManager.currentViewMode = this.currentMode;
+            window.PanelManager.currentViewMode = newMode;
             window.PanelManager.updateToggleButton();
         }
 
         // Отправляем событие
         document.dispatchEvent(new CustomEvent('viewModeChanged', {
-            detail: { mode: this.currentMode, oldMode: oldMode }
+            detail: { mode: newMode, oldMode: oldMode }
         }));
 
         // Если переключились в 2D, загружаем активный чертеж
-        if (this.currentMode === '2D') {
-            const activeRow = document.querySelector('.part-row.active');
+        if (newMode === '2D') {
+            let activeRow = document.querySelector('.part-row.active');
+            
+            // Если нет активной строки, выбираем первую
+            if (!activeRow) {
+                activeRow = document.querySelector('.part-row');
+                if (activeRow) {
+                    // Снимаем выделение со всех строк
+                    document.querySelectorAll('.part-row').forEach(row => {
+                        row.classList.remove('active');
+                    });
+                    // Выделяем первую строку
+                    activeRow.classList.add('active');
+                    
+                    const partName = activeRow.getAttribute('data-part-name');
+                    console.log('📋 2D режим: автоматически выбрана первая деталь:', partName);
+                    
+                    // Показываем деталь в 3D
+                    if (window.SpecificationService) {
+                        window.SpecificationService.highlightParts(partName, true);
+                    }
+                }
+            }
+            
             if (activeRow) {
                 const partName = activeRow.getAttribute('data-part-name');
                 this.loadDrawing(partName);
+            } else {
+                console.warn('⚠️ 2D режим: нет доступных деталей для отображения');
             }
         }
 
@@ -150,28 +171,43 @@ export const DrawingViewer = {
      * Загружает чертеж
      */
     async loadDrawing(designation) {
-        this.refreshProjectId();
+        const projectId = this.refreshProjectId();
+
+        if (!projectId) {
+            console.error('❌ Не удалось получить ID проекта для загрузки чертежа');
+            return false;
+        }
+
+        console.log('📥 Загрузка чертежа для:', designation, 'проект:', projectId);
 
         // Сохраняем текущую деталь в store
         drawingStore.setCurrentPart(designation);
 
-        const success = await DrawingLoader.loadDrawing(designation, this.currentProjectId);
+        const success = await DrawingLoader.loadDrawing(designation, projectId);
 
         // Используем DrawingLoader.currentDrawings вместо window.currentDrawings
         if (success && DrawingLoader.currentDrawings?.files.length > 1) {
             UIManager.createMultiDrawingControls(DrawingLoader);
-        } else {
+        } else if (success) {
+            // Чертеж загружен, но он один
             UIManager.removeMultiDrawingControls();
+        } else {
+            // Чертеж не найден
+            UIManager.removeMultiDrawingControls();
+            // Показываем placeholder с сообщением (уже показано в DrawingLoader)
         }
 
         ZoomManager.resetZoom();
+        
+        return success;
     },
 
     /**
      * Получает текущий режим
+     * @returns {string} '3D' или '2D'
      */
     getCurrentMode() {
-        return this.currentMode;
+        return getCurrentMode();
     },
 
     /**
@@ -183,17 +219,26 @@ export const DrawingViewer = {
 };
 
 // Автоматическая инициализация
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => DrawingViewer.init());
-} else {
-    DrawingViewer.init();
+function initDrawingViewer() {
+    const projectData = document.getElementById('project-data');
+    const projectId = projectData?.getAttribute('data-project-id');
+    
+    if (projectId) {
+        DrawingViewer.init();
+    } else {
+        // Ждём инициализации проекта
+        console.log('⏳ Ожидание инициализации проекта для 2D viewer...');
+        setTimeout(initDrawingViewer, 100);
+    }
 }
 
-// Экспортируем для глобального использования
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDrawingViewer);
+} else {
+    initDrawingViewer();
+}
+
+// Экспортируем только DrawingViewer для глобального использования (совместимость)
 window.DrawingViewer = DrawingViewer;
-window.ZoomManager = ZoomManager;
-window.DrawingLoader = DrawingLoader;
-window.InputHandlers = InputHandlers;
-window.UIManager = UIManager;
 
 export default DrawingViewer;

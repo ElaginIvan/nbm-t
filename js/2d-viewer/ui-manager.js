@@ -78,7 +78,8 @@ export const UIManager = {
         prevBtn.addEventListener('click', () => drawingLoader.switchDrawing(-1));
         nextBtn.addEventListener('click', () => drawingLoader.switchDrawing(1));
 
-        this.updateDrawingIndicator();
+        // Обновляем индикатор с переданным drawingLoader
+        this.updateDrawingIndicator(drawingLoader);
     },
 
     /**
@@ -97,13 +98,14 @@ export const UIManager = {
 
     /**
      * Обновляет индикатор текущего чертежа
+     * @param {Object} drawingLoader - DrawingLoader объект
      */
-    updateDrawingIndicator() {
-        // Получаем данные из DrawingLoader
-        const drawingLoader = window.DrawingLoader;
-        if (!drawingLoader || !drawingLoader.currentDrawings) return;
+    updateDrawingIndicator(drawingLoader) {
+        // Используем переданный drawingLoader или window.DrawingLoader
+        const loader = drawingLoader || window.DrawingLoader;
+        if (!loader || !loader.currentDrawings) return;
 
-        const { files, currentIndex } = drawingLoader.currentDrawings;
+        const { files, currentIndex } = loader.currentDrawings;
 
         const currentEl = document.querySelector('.current-sheet');
         const totalEl = document.querySelector('.total-sheets');
@@ -150,5 +152,8 @@ export const UIManager = {
         }
     }
 };
+
+// Экспортируем для глобального использования
+window.UIManager = UIManager;
 
 export default UIManager;

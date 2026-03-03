@@ -3,14 +3,21 @@
  * Интегрирован с store для сохранения состояния
  */
 
-import { drawingStore } from '../store.js';
+import { uiStore, drawingStore } from '../store.js';
+
+/**
+ * Получает текущий режим из store
+ * @returns {string} '3D' или '2D'
+ */
+function getCurrentMode() {
+    return uiStore.getCurrentMode() || '3D';
+}
 
 export const ZoomManager = {
     zoomLevel: 1,
     minZoom: 0.1,
     maxZoom: 5,
     imagePos: { x: 0, y: 0 },
-    currentMode: '3D',
     isDragging: false,
     startPos: { x: 0, y: 0 },
 
@@ -39,7 +46,7 @@ export const ZoomManager = {
      * Увеличивает масштаб
      */
     zoomIn(delta = 0.1) {
-        if (this.currentMode !== '2D') return;
+        if (getCurrentMode() !== '2D') return;
 
         this.zoomLevel = Math.min(this.maxZoom, this.zoomLevel + delta);
         this.applyZoom();
@@ -49,7 +56,7 @@ export const ZoomManager = {
      * Уменьшает масштаб
      */
     zoomOut(delta = 0.1) {
-        if (this.currentMode !== '2D') return;
+        if (getCurrentMode() !== '2D') return;
 
         this.zoomLevel = Math.max(this.minZoom, this.zoomLevel - delta);
         this.applyZoom();
@@ -59,7 +66,7 @@ export const ZoomManager = {
      * Устанавливает масштаб
      */
     setZoom(level) {
-        if (this.currentMode !== '2D') return;
+        if (getCurrentMode() !== '2D') return;
 
         this.zoomLevel = Math.max(this.minZoom, Math.min(this.maxZoom, level));
         this.applyZoom();
@@ -69,7 +76,7 @@ export const ZoomManager = {
      * Перемещает изображение
      */
     pan(x, y) {
-        if (this.currentMode !== '2D') return;
+        if (getCurrentMode() !== '2D') return;
 
         this.imagePos.x += x;
         this.imagePos.y += y;
@@ -80,7 +87,7 @@ export const ZoomManager = {
      * Начинает перетаскивание
      */
     startDrag(startX, startY) {
-        if (this.currentMode !== '2D') return;
+        if (getCurrentMode() !== '2D') return;
 
         this.isDragging = true;
         this.startPos = { x: startX, y: startY };
@@ -90,7 +97,7 @@ export const ZoomManager = {
      * Перетаскивает изображение
      */
     drag(currentX, currentY) {
-        if (!this.isDragging || this.currentMode !== '2D') return;
+        if (!this.isDragging || getCurrentMode() !== '2D') return;
 
         const deltaX = currentX - this.startPos.x;
         const deltaY = currentY - this.startPos.y;
@@ -110,7 +117,7 @@ export const ZoomManager = {
      * Проверяет, является ли текущий режим 2D
      */
     is2DMode() {
-        return this.currentMode === '2D';
+        return getCurrentMode() === '2D';
     }
 };
 

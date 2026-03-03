@@ -5,8 +5,62 @@
 
 import { drawingStore } from '../store.js';
 
+// Кэш для результатов поиска чертежей
+const drawingsCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 минут
+
+// Структура кэша: Map<key, {data, timestamp}>
+// key: `${projectId}:${designation}`
+
 export const DrawingLoader = {
     currentDrawings: null,
+
+    /**
+     * Очищает устаревшие записи в кэше
+     */
+    cleanupCache() {
+        const now = Date.now();
+        for (const [key, value] of drawingsCache.entries()) {
+            if (now - value.timestamp > CACHE_TTL) {
+                drawingsCache.delete(key);
+            }
+        }
+    },
+
+    /**
+     * Получает из кэша результаты поиска чертежей
+     * @param {string} designation - Обозначение детали
+     * @param {string} projectId - ID проекта
+     * @returns {Array|null} Массив чертежей или null
+     */
+    getCachedDrawings(designation, projectId) {
+        const key = `${projectId}:${designation}`;
+        const cached = drawingsCache.get(key);
+        
+        if (!cached) return null;
+        
+        // Проверяем актуальность
+        if (Date.now() - cached.timestamp > CACHE_TTL) {
+            drawingsCache.delete(key);
+            return null;
+        }
+        
+        return cached.data;
+    },
+
+    /**
+     * Сохраняет результаты поиска чертежей в кэш
+     * @param {string} designation - Обозначение детали
+     * @param {string} projectId - ID проекта
+     * @param {Array} drawings - Массив чертежей
+     */
+    cacheDrawings(designation, projectId, drawings) {
+        const key = `${projectId}:${designation}`;
+        drawingsCache.set(key, {
+            data: drawings,
+            timestamp: Date.now()
+        });
+    },
 
     /**
      * Загружает чертежи для детали
@@ -20,10 +74,51 @@ export const DrawingLoader = {
         const cleanDesignation = designation.replace(/:\d+$/, '').trim();
         console.log('🔍 Поиск чертежей для:', cleanDesignation);
 
+        // Проверяем кэш
+        const cachedDrawings = this.getCachedDrawings(cleanDesignation, projectId);
+        
+        if (cachedDrawings !== null) {
+            console.log('💾 Чертежи загружены из кэша:', cachedDrawings.length);
+            // Используем кэшированные данные
+            if (cachedDrawings.length === 0) {
+                this.showNoDrawingFound(cleanDesignation);
+                drawingStore.setCurrentPart(null);
+                this.currentDrawings = null;
+                if (window.UIManager) {
+                    window.UIManager.removeMultiDrawingControls();
+                }
+                return false;
+            }
+            
+            // Восстанавливаем из кэша
+            drawingStore.setCurrentPart(designation);
+            this.currentDrawings = {
+                files: cachedDrawings,
+                currentIndex: 0,
+                designation: cleanDesignation
+            };
+            
+            if (cachedDrawings.length === 1) {
+                this.loadSingleDrawing(cachedDrawings[0]);
+                if (window.UIManager) {
+                    window.UIManager.removeMultiDrawingControls();
+                }
+            } else {
+                this.loadMultipleDrawings(cachedDrawings, cleanDesignation);
+                if (window.UIManager) {
+                    window.UIManager.createMultiDrawingControls(this);
+                }
+            }
+            return true;
+        }
+
         // Сохраняем текущую деталь в store
         drawingStore.setCurrentPart(designation);
 
         const drawings = await this.findDrawingsByPattern(cleanDesignation, projectId);
+        
+        // Кэшируем результат
+        this.cacheDrawings(cleanDesignation, projectId, drawings);
 
         if (drawings.length === 0) {
             this.showNoDrawingFound(cleanDesignation);
@@ -97,7 +192,7 @@ export const DrawingLoader = {
 
             try {
                 const response = await fetch(pathWithSheet, { method: 'HEAD' });
-                if (response.ok) {
+                if (response.ok && response.status === 200) {
                     drawings.push({
                         path: pathWithSheet,
                         name: `${designation} Лист-${sheetNumber}.png`,
@@ -106,14 +201,16 @@ export const DrawingLoader = {
                     });
                     sheetNumber++;
                 } else {
+                    // Файл не найден — прекращаем поиск
                     break;
                 }
             } catch (error) {
+                // Ошибка сети — прекращаем поиск
                 break;
             }
         }
 
-        // Альтернативный формат (без пробела)
+        // Альтернативный формат (без пробела) — ищем только если ничего не найдено
         if (drawings.length === 0) {
             sheetNumber = 1;
             while (sheetNumber <= maxSheets) {
@@ -121,7 +218,7 @@ export const DrawingLoader = {
 
                 try {
                     const response = await fetch(pathNoSpace, { method: 'HEAD' });
-                    if (response.ok) {
+                    if (response.ok && response.status === 200) {
                         drawings.push({
                             path: pathNoSpace,
                             name: `${designation}Лист-${sheetNumber}.png`,
@@ -138,6 +235,8 @@ export const DrawingLoader = {
             }
         }
 
+        console.log(`🔎 Найдено чертежей для "${designation}": ${drawings.length}`);
+        
         return drawings.sort((a, b) => {
             if (a.isBase && !b.isBase) return -1;
             if (!a.isBase && b.isBase) return 1;
@@ -219,7 +318,7 @@ export const DrawingLoader = {
             console.log(`✅ Лист ${index + 1} загружен:`, drawing.name);
 
             if (window.UIManager) {
-                window.UIManager.updateDrawingIndicator();
+                window.UIManager.updateDrawingIndicator(this);
             }
         };
 
@@ -275,5 +374,8 @@ export const DrawingLoader = {
         return this.currentDrawings?.files.length || 0;
     }
 };
+
+// Экспортируем для глобального использования
+window.DrawingLoader = DrawingLoader;
 
 export default DrawingLoader;

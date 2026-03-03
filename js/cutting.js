@@ -11,7 +11,7 @@ import { cuttingStore, specificationStore } from './store.js';
 // ============================================================
 
 /**
- * Визуализирует результаты раскроя
+ * Визуализирует результаты раскроя с использованием DocumentFragment
  */
 function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
     const resultsContainer = document.getElementById('results-container');
@@ -49,6 +49,9 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
 
     summaryContainer.innerHTML = summaryHTML;
     summaryContainer.style.display = 'block';
+
+    // Используем DocumentFragment для производительности
+    const fragment = document.createDocumentFragment();
 
     // Обрабатываем каждый материал
     for (const [materialName, data] of allResults.entries()) {
@@ -152,7 +155,7 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
             materialSection.appendChild(stockElement);
         });
 
-        // Сводка по материалу
+        // Сводка по материала
         const materialSummary = document.createElement('div');
         materialSummary.className = 'material-summary';
         materialSummary.innerHTML = `
@@ -165,13 +168,18 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
             </div>
         `;
         materialSection.appendChild(materialSummary);
-        resultsContainer.appendChild(materialSection);
+        
+        // Добавляем во фрагмент вместо прямого добавления в DOM
+        fragment.appendChild(materialSection);
 
         // Общая статистика
         grandTotalWaste += materialTotalWaste;
         grandTotalStocks += materialTotalStocks;
         grandTotalParts += materialTotalParts;
     }
+
+    // Добавляем всё содержимое фрагмента в DOM одним разом
+    resultsContainer.appendChild(fragment);
 
     // Общая сводка
     const totalSummary = document.createElement('div');

@@ -101,8 +101,17 @@ function attachTableEventListeners() {
  * @param {string} partName - Имя детали
  */
 function loadDrawingForPart(partName) {
-    if (typeof window.DrawingViewer !== 'undefined' && window.DrawingViewer.loadDrawing) {
+    // Используем DrawingViewer напрямую (импортированный модуль)
+    if (window.DrawingViewer && typeof window.DrawingViewer.loadDrawing === 'function') {
         window.DrawingViewer.loadDrawing(partName);
+    } else {
+        console.warn('DrawingViewer ещё не инициализирован, загрузка чертежа:', partName);
+        // Пробуем загрузить позже
+        setTimeout(() => {
+            if (window.DrawingViewer && typeof window.DrawingViewer.loadDrawing === 'function') {
+                window.DrawingViewer.loadDrawing(partName);
+            }
+        }, 100);
     }
 }
 
@@ -131,6 +140,7 @@ function subscribeToStructure() {
     specificationStore.subscribeStructure((structure) => {
         if (structure && structure.length > 0) {
             renderSpecificationTable(structure);
+            // Обработчики добавляются внутри renderSpecificationTable
         }
     });
 }

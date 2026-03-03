@@ -36,6 +36,7 @@ export class ResizeHandler {
         this.lastResizeCall = 0;
         this.resizeThrottleDelay = RESIZE_THROTTLE_DELAY;
         this.resizeTimeout = null;
+        this.rafId = null; // Для requestAnimationFrame
 
         // Инициализируем из store или localStorage
         this.currentView = uiStore.getCurrentView() || this.restoreViewState();
@@ -157,19 +158,14 @@ export class ResizeHandler {
     }
 
     throttledWindowResize() {
-        const now = Date.now();
+        // Используем requestAnimationFrame для плавности вместо setTimeout
+        if (this.rafId) return; // Уже запланировано
 
-        if (now - this.lastResizeCall >= this.resizeThrottleDelay) {
+        this.rafId = requestAnimationFrame(() => {
             this.callWindowResize();
-            this.lastResizeCall = now;
-        } else {
-            if (this.resizeTimeout) {
-                clearTimeout(this.resizeTimeout);
-            }
-            this.resizeTimeout = setTimeout(() => {
-                this.callWindowResize();
-            }, this.resizeThrottleDelay);
-        }
+            this.rafId = null;
+            this.lastResizeCall = performance.now();
+        });
     }
 
     callWindowResize() {
@@ -208,9 +204,10 @@ export class ResizeHandler {
         this.infoPanel.style.transition = '';
         document.body.style.cursor = '';
 
-        if (this.resizeTimeout) {
-            clearTimeout(this.resizeTimeout);
-            this.resizeTimeout = null;
+        // Отменяем запланированный requestAnimationFrame
+        if (this.rafId) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
         }
 
         this.callWindowResize();

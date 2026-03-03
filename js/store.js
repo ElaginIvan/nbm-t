@@ -5,6 +5,41 @@
 
 const STATE_VERSION = '1.0.0';
 
+/**
+ * Глубокое клонирование с поддержкой Map, Set, Date
+ * @param {*} obj - Объект для клонирования
+ * @returns {*} Клонированный объект
+ */
+function deepClone(obj) {
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+    
+    if (obj instanceof Map) {
+        return new Map(obj);
+    }
+    
+    if (obj instanceof Set) {
+        return new Set(obj);
+    }
+    
+    if (obj instanceof Date) {
+        return new Date(obj);
+    }
+    
+    if (Array.isArray(obj)) {
+        return obj.map(deepClone);
+    }
+    
+    const cloned = {};
+    for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+            cloned[key] = deepClone(obj[key]);
+        }
+    }
+    return cloned;
+}
+
 // Начальное состояние приложения
 const initialState = {
     // Данные проекта
@@ -71,7 +106,7 @@ const initialState = {
 
 class Store {
     constructor(initialState) {
-        this.state = JSON.parse(JSON.stringify(initialState));
+        this.state = deepClone(initialState);
         this.listeners = new Map();
         this.middlewares = [];
     }
@@ -115,13 +150,22 @@ class Store {
      * Обновление состояния
      * @param {string} path - Путь к состоянию
      * @param {*} value - Новое значение
-     * @param {boolean} silent - Не уведомлять подписчиков
+     * @param {Object|boolean} options - Опции или silent (для обратной совместимости)
+     * @param {boolean} options.silent - Не уведомлять подписчиков
+     * @param {boolean} options.cascade - Уведомлять подписчиков родительских путей
      */
-    setState(path, value, silent = false) {
+    setState(path, value, options = {}) {
+        // Обратная совместимость: если передан boolean, считаем его silent
+        if (typeof options === 'boolean') {
+            options = { silent: options, cascade: true };
+        }
+        
+        const { silent = false, cascade = true } = options;
+
         const keys = path.split('.');
         const lastKey = keys.pop();
-        
-        // Находим родительский объект
+
+        // Находим родительский объект (прямой доступ вместо getState)
         let current = this.state;
         for (const key of keys) {
             if (!current[key]) {
@@ -131,7 +175,7 @@ class Store {
         }
 
         const oldValue = current[lastKey];
-        
+
         // Не уведомляем если значение не изменилось
         if (oldValue === value) return;
 
@@ -139,11 +183,18 @@ class Store {
 
         if (!silent) {
             this._notify(path, value, oldValue);
-            
-            // Уведомляем подписчиков родительских путей
-            for (let i = keys.length; i > 0; i--) {
-                const parentPath = keys.slice(0, i).join('.');
-                this._notify(parentPath, this.getState(parentPath));
+
+            // Уведомляем подписчиков родительских путей (только если cascade = true)
+            if (cascade) {
+                for (let i = keys.length; i > 0; i--) {
+                    const parentPath = keys.slice(0, i).join('.');
+                    // Прямой доступ к state вместо getState для производительности
+                    let parentValue = this.state;
+                    for (const key of keys.slice(0, i)) {
+                        parentValue = parentValue?.[key];
+                    }
+                    this._notify(parentPath, parentValue);
+                }
             }
         }
     }
@@ -242,13 +293,14 @@ export const cutting3dStore = {
     getAxisValues: () => store.getState('cutting3d.axisValues'),
     getAxisBounds: () => store.getState('cutting3d.axisBounds'),
     getInvertedAxes: () => store.getState('cutting3d.invertedAxes'),
-    
+
     setActive: (isActive) => store.setState('cutting3d.isActive', isActive),
     setActiveAxis: (axis) => store.setState('cutting3d.activeAxis', axis),
     setAxisValues: (values) => store.setState('cutting3d.axisValues', values),
     setAxisValue: (axis, value) => {
         const current = store.getState('cutting3d.axisValues');
-        store.setState('cutting3d.axisValues', { ...current, [axis]: value });
+        // Используем cascade: false для уменьшения лишних уведомлений
+        store.setState('cutting3d.axisValues', { ...current, [axis]: value }, { cascade: false });
     },
     setAxisBounds: (bounds) => store.setState('cutting3d.axisBounds', bounds),
     setInvertedAxes: (inverted) => store.setState('cutting3d.invertedAxes', inverted),
@@ -256,7 +308,7 @@ export const cutting3dStore = {
         const current = store.getState('cutting3d.invertedAxes');
         store.setState('cutting3d.invertedAxes', { ...current, [axis]: !current[axis] });
     },
-    
+
     subscribe: (callback) => store.subscribe('cutting3d', callback),
     subscribeActive: (callback) => store.subscribe('cutting3d.isActive', callback),
     subscribeActiveAxis: (callback) => store.subscribe('cutting3d.activeAxis', callback)

@@ -177,6 +177,8 @@ export const SpecificationService = {
 
         const finalStructure = [];
         const uniqueKeys = new Set();
+        // Используем Map для O(1) поиска вместо O(n) findIndex
+        const structureMap = new Map();
 
         structure.forEach(group => {
             const parentName = group.parentObject ?
@@ -198,15 +200,12 @@ export const SpecificationService = {
                 group.instanceCount = this.countInstancesInGroup(group);
 
                 finalStructure.push(group);
+                structureMap.set(uniqueKey, group);
             } else {
-                const existingIndex = finalStructure.findIndex(g =>
-                    `${g.name}_${g.level}_${g.parentObject ?
-                        cleanName(g.parentObject.userData?.name || g.parentObject.name || '') :
-                        'root'}` === uniqueKey
-                );
-
-                if (existingIndex >= 0) {
-                    const existingGroup = finalStructure[existingIndex];
+                // O(1) поиск вместо O(n) findIndex
+                const existingGroup = structureMap.get(uniqueKey);
+                
+                if (existingGroup) {
                     existingGroup.threeObjects.push(...group.threeObjects);
                     existingGroup.meshObjects.push(...group.meshObjects);
                     existingGroup.instanceCount += 1;
