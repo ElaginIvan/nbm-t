@@ -8,7 +8,7 @@ import { GLTFLoader } from 'three/addons/GLTFLoader.js';
 
 import { initCuttingTool } from './model-cut.js';
 import { getModelPath, showErrorMessage } from './model-utils.js';
-import { setupLights } from './model-lights.js';
+import { setupLights, updateCameraLightPosition } from './model-lights.js';
 import { createAdaptiveGrid, updateGridPosition, checkCameraOrientation } from './model-grid.js';
 import { addEdgesToObject } from './model-geometry.js';
 import { setupCamera } from './model-camera.js';
@@ -339,6 +339,11 @@ function animate() {
 
     if (gridHelper && camera) {
         checkCameraOrientation(gridHelper, camera, isGridVisible, originalGridOpacity);
+    }
+
+    // Обновляем позицию света в соответствии с камерой
+    if (camera && model) {
+        updateCameraLightPosition(camera, model);
     }
 
     if (controls) controls.update();
