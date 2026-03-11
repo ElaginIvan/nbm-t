@@ -6,7 +6,7 @@ import { InputHandlers } from './input-handlers.js';
 import { DrawingLoader } from './drawing-loader.js';
 import { ZoomManager } from './zoom-manager.js';
 import { UIManager } from './ui-manager.js';
-import { uiStore, drawingStore } from '../store.js';
+import { store } from '../store.js';
 
 // Локальное состояние (не дублирует store)
 let currentProjectId = null;
@@ -16,7 +16,7 @@ let currentProjectId = null;
  * @returns {string} '3D' или '2D'
  */
 function getCurrentMode() {
-    return uiStore.getCurrentMode() || '3D';
+    return store.getState('ui.currentMode') || '3D';
 }
 
 export const DrawingViewer = {
@@ -32,7 +32,7 @@ export const DrawingViewer = {
         UIManager.updateToggleButton(getCurrentMode());
 
         // Подписываемся на изменения режима из store
-        uiStore.subscribeCurrentMode((mode) => {
+        store.subscribe('ui.currentMode', (mode) => {
             if (mode) {
                 ZoomManager.currentMode = mode;
             }
@@ -103,7 +103,7 @@ export const DrawingViewer = {
         const newMode = oldMode === '3D' ? '2D' : '3D';
 
         // Обновляем режим в store и ZoomManager
-        uiStore.setCurrentMode(newMode);
+        store.setState('ui.currentMode', newMode);
         ZoomManager.currentMode = newMode;
 
         UIManager.updateView(newMode);
@@ -181,7 +181,7 @@ export const DrawingViewer = {
         console.log('📥 Загрузка чертежа для:', designation, 'проект:', projectId);
 
         // Сохраняем текущую деталь в store
-        drawingStore.setCurrentPart(designation);
+        store.setState('drawing.currentPart', designation);
 
         const success = await DrawingLoader.loadDrawing(designation, projectId);
 
@@ -214,7 +214,7 @@ export const DrawingViewer = {
      * Получает текущую деталь
      */
     getCurrentPart() {
-        return drawingStore.getCurrentPart();
+        return store.getState('drawing.currentPart');
     }
 };
 

@@ -18,7 +18,7 @@ export function createAdaptiveGrid(scene) {
     const axisLength = size / 2;
     const axesGroup = new THREE.Group();
     const axisWidth = 0.3; // Ширина полоски (видна сверху)
-    
+
     // Ось X (красная) - плоскость вытянутая по X
     const planeX = new THREE.Mesh(
         new THREE.PlaneGeometry(axisLength * 2, axisWidth),
@@ -36,7 +36,7 @@ export function createAdaptiveGrid(scene) {
     planeZ.rotation.x = -Math.PI / 2;
     planeZ.receiveShadow = false; // Не получает тени
     axesGroup.add(planeZ);
-    
+
     axesGroup.position.y = 0.001;
 
     const gridHelper = new THREE.Group();

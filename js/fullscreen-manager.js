@@ -3,7 +3,7 @@
  * Отвечает за управление полноэкранным режимом
  */
 
-import { uiStore } from './store.js';
+import { store } from './store.js';
 
 export const FullscreenManager = {
     isFullscreen: false,
@@ -63,7 +63,7 @@ export const FullscreenManager = {
         }
 
         this.isFullscreen = true;
-        uiStore.setFullscreen(true);
+        store.setState('ui.isFullscreen', true);
 
         this.updateButtonState();
 
@@ -102,7 +102,7 @@ export const FullscreenManager = {
         }
 
         this.isFullscreen = false;
-        uiStore.setFullscreen(false);
+        store.setState('ui.isFullscreen', false);
 
         this.updateButtonState();
 

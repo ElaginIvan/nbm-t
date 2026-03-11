@@ -4,7 +4,7 @@
  */
 
 import { loadCSV, findInCSV, getBaseDesignation } from '../utils/csv.js';
-import { specificationStore, modelStore } from '../store.js';
+import { store } from '../store.js';
 
 /**
  * Очищает имя от суффиксов Three.js (например, удаляет :0, :1 и т.д.)
@@ -34,7 +34,7 @@ export const SpecificationService = {
         const csvPath = `models/${projectId}/spec.csv`;
         const csvData = await loadCSV(csvPath);
         
-        specificationStore.setCSVData(csvData);
+        store.setState('specification.csvData', csvData);
         return csvData;
     },
 
@@ -44,7 +44,7 @@ export const SpecificationService = {
      * @returns {Object|null} Данные из CSV или null
      */
     findCSVData(designation) {
-        const csvData = specificationStore.getCSVData();
+        const csvData = store.getState('specification.csvData');
         return findInCSV(designation, csvData);
     },
 
@@ -234,14 +234,14 @@ export const SpecificationService = {
      */
     async saveModelStructure(threeModel, projectId) {
         try {
-            specificationStore.setLoading(true);
+            store.setState('specification.isLoading', true);
             
             // Загружаем CSV данные
             await this.loadCSVData(projectId);
             
             // Извлекаем структуру модели
             const structure = this.extractModelStructure(threeModel);
-            specificationStore.setStructure(structure);
+            store.setState('specification.structure', structure);
             
             // Выводим итоговую статистику
             const totalParts = structure.reduce((sum, item) => sum + (item.instanceCount || 1), 0);
@@ -250,7 +250,7 @@ export const SpecificationService = {
         } catch (error) {
             console.error('Error in saveModelStructure:', error);
         } finally {
-            specificationStore.setLoading(false);
+            store.setState('specification.isLoading', false);
         }
     },
 
@@ -261,10 +261,10 @@ export const SpecificationService = {
      */
     highlightParts(partName, hideOthers = true) {
         // Сохраняем выбранную деталь в store
-        specificationStore.setSelectedPart(partName);
+        store.setState('specification.lastSelectedPart', partName);
         
-        const structure = specificationStore.getStructure();
-        const model = modelStore.getObject();
+        const structure = store.getState('specification.structure');
+        const model = store.getState('model.object');
 
         if (!structure || !model) {
             console.warn('Model structure not loaded');
@@ -347,9 +347,9 @@ export const SpecificationService = {
      */
     showAllParts() {
         // Сбрасываем сохраненное выделение
-        specificationStore.setSelectedPart(null);
+        store.setState('specification.lastSelectedPart', null);
         
-        const structure = specificationStore.getStructure();
+        const structure = store.getState('specification.structure');
         if (!structure) return;
 
         structure.forEach(item => {
@@ -381,7 +381,7 @@ export const SpecificationService = {
      * @param {Function} renderCallback - Callback для рендеринга (получает structure)
      */
     renderSpecificationTable(renderCallback) {
-        const structure = specificationStore.getStructure();
+        const structure = store.getState('specification.structure');
 
         if (!structure || structure.length === 0) {
             renderCallback([]);
@@ -396,17 +396,17 @@ export const SpecificationService = {
      * @returns {string|null} Имя детали
      */
     getLastSelectedPart() {
-        return specificationStore.getSelectedPart();
+        return store.getState('specification.lastSelectedPart');
     },
 
     /**
      * Очищает данные спецификации
      */
     clear() {
-        specificationStore.setStructure([]);
-        specificationStore.setCSVData([]);
-        specificationStore.setSelectedPart(null);
-        specificationStore.setLoading(false);
+        store.setState('specification.structure', []);
+        store.setState('specification.csvData', []);
+        store.setState('specification.lastSelectedPart', null);
+        store.setState('specification.isLoading', false);
     }
 };
 

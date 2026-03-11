@@ -4,7 +4,7 @@
  */
 
 import { loadCSV, parseCSV, decodeCSV, splitCSVLine } from '../utils/csv.js';
-import { cuttingStore, specificationStore } from '../store.js';
+import { store } from '../store.js';
 
 /**
  * Парсит строку материала для получения типа и длины
@@ -176,7 +176,7 @@ export const CuttingService = {
      */
     async loadCuttingData() {
         try {
-            cuttingStore.setLoading(true);
+            store.setState('cutting.isLoading', true);
 
             const projectId = getProjectId();
             if (!projectId) {
@@ -196,17 +196,17 @@ export const CuttingService = {
             const csvText = decodeCSV(buffer);
             const csvData = parseCSV(csvText);
 
-            const modelStructure = specificationStore.getStructure() || [];
+            const modelStructure = store.getState('specification.structure') || [];
             const materialsData = groupMaterialsByType(csvData, modelStructure);
 
-            cuttingStore.setMaterialsData(materialsData);
+            store.setState('cutting.materialsData', materialsData);
             return materialsData;
 
         } catch (error) {
             console.error('Error loading cutting data:', error);
             return {};
         } finally {
-            cuttingStore.setLoading(false);
+            store.setState('cutting.isLoading', false);
         }
     },
 
@@ -222,7 +222,7 @@ export const CuttingService = {
             multiplicity = 1
         } = options;
 
-        let materialsData = cuttingStore.getMaterialsData();
+        let materialsData = store.getState('cutting.materialsData');
         
         // Если данные не загружены, загружаем их
         if (Object.keys(materialsData).length === 0) {
@@ -295,7 +295,7 @@ export const CuttingService = {
             allResults.set(materialName, { plan: groupedPlan });
         }
 
-        cuttingStore.setResults(allResults);
+        store.setState('cutting.results', allResults);
         return allResults;
     },
 
@@ -304,7 +304,7 @@ export const CuttingService = {
      * @returns {Object} Настройки
      */
     getSettings() {
-        return cuttingStore.getSettings();
+        return store.getState('cutting.settings');
     },
 
     /**
@@ -313,16 +313,16 @@ export const CuttingService = {
      * @param {*} value - Значение
      */
     updateSetting(key, value) {
-        cuttingStore.updateSetting(key, value);
+        store.setState('cutting.settings', { ...store.getState('cutting.settings'), [key]: value });
     },
 
     /**
      * Очищает данные раскроя
      */
     clear() {
-        cuttingStore.setMaterialsData({});
-        cuttingStore.setResults(null);
-        cuttingStore.setLoading(false);
+        store.setState('cutting.materialsData', {});
+        store.setState('cutting.results', null);
+        store.setState('cutting.isLoading', false);
     }
 };
 

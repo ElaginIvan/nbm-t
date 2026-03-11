@@ -5,7 +5,7 @@
  */
 
 import * as THREE from 'three';
-import { cutting3dStore } from '../store.js';
+import { store } from '../store.js';
 
 // ============================================================
 // КОНСТАНТЫ И НАСТРОЙКИ
@@ -65,8 +65,8 @@ function computeModelBounds() {
     });
 
     // Обновляем store
-    cutting3dStore.setAxisBounds(bounds);
-    cutting3dStore.setAxisValues(initialValues);
+    store.setState('cutting3d.axisBounds', bounds);
+    store.setState('cutting3d.axisValues', initialValues);
 
     // Вычисляем размер плоскости заглушки
     const size = new THREE.Vector3();
@@ -216,11 +216,11 @@ function disposeGroup(group) {
  * Включает режим сечения
  */
 export function enableCutting() {
-    if (!refs.model || cutting3dStore.isActive()) return;
+    if (!refs.model || store.getState('cutting3d.isActive')) return;
 
-    cutting3dStore.setActive(true);
+    store.setState('cutting3d.isActive', true);
 
-    const bounds = cutting3dStore.getAxisBounds();
+    const bounds = store.getState('cutting3d.axisBounds');
 
     // Инициализируем плоскости сечения
     cuttingObjects.clippingPlanes = {
@@ -298,9 +298,9 @@ export function enableCutting() {
  * Отключает режим сечения
  */
 export function disableCutting() {
-    if (!refs.model || !cutting3dStore.isActive()) return;
+    if (!refs.model || !store.getState('cutting3d.isActive')) return;
 
-    cutting3dStore.setActive(false);
+    store.setState('cutting3d.isActive', false);
 
     // Восстанавливаем оригинальные материалы
     refs.model.traverse((node) => {
@@ -322,19 +322,19 @@ export function disableCutting() {
     cuttingObjects.clippingPlanes = { x: null, y: null, z: null };
 
     // Сбрасываем состояние в store
-    cutting3dStore.setActive(false);
-    cutting3dStore.setActiveAxis(null);
+    store.setState('cutting3d.isActive', false);
+    store.setState('cutting3d.activeAxis', null);
 }
 
 /**
  * Применяет текущие плоскости отсечения к модели
  */
 function applyClippingPlanes() {
-    if (!refs.model || !cutting3dStore.isActive()) return;
+    if (!refs.model || !store.getState('cutting3d.isActive')) return;
 
-    const axisValues = cutting3dStore.getAxisValues();
-    const invertedAxes = cutting3dStore.getInvertedAxes();
-    const bounds = cutting3dStore.getAxisBounds();
+    const axisValues = store.getState('cutting3d.axisValues');
+    const invertedAxes = store.getState('cutting3d.invertedAxes');
+    const bounds = store.getState('cutting3d.axisBounds');
 
     const activePlanes = [];
     const activeAxes = [];
@@ -488,18 +488,18 @@ function setupCuttingControls() {
     // Выбор оси
     axisBtns.forEach(btn => {
         btn.addEventListener('click', () => {
-            if (!cutting3dStore.isActive()) return;
+            if (!store.getState('cutting3d.isActive')) return;
 
             const axis = btn.dataset.axis;
-            cutting3dStore.setActiveAxis(axis);
+            store.setState('cutting3d.activeAxis', axis);
             updateAxisUI(axisBtns, invertBtn, slider);
         });
     });
 
     // Слайдер
     slider.addEventListener('input', (e) => {
-        const activeAxis = cutting3dStore.getActiveAxis();
-        if (!activeAxis || !cutting3dStore.isActive()) return;
+        const activeAxis = store.getState('cutting3d.activeAxis');
+        if (!activeAxis || !store.getState('cutting3d.isActive')) return;
 
         updateAxisValueFromSlider(parseFloat(e.target.value));
         applyClippingPlanes();
@@ -507,11 +507,13 @@ function setupCuttingControls() {
 
     // Инверсия
     invertBtn.addEventListener('click', () => {
-        const activeAxis = cutting3dStore.getActiveAxis();
-        if (!activeAxis || !cutting3dStore.isActive()) return;
+        const activeAxis = store.getState('cutting3d.activeAxis');
+        if (!activeAxis || !store.getState('cutting3d.isActive')) return;
 
-        cutting3dStore.invertAxis(activeAxis);
-        invertBtn.classList.toggle('active', cutting3dStore.getInvertedAxes()[activeAxis]);
+        const currentInverted = store.getState('cutting3d.invertedAxes');
+        store.setState('cutting3d.invertedAxes', { ...currentInverted, [activeAxis]: !currentInverted[activeAxis] });
+        const newInverted = store.getState('cutting3d.invertedAxes');
+        invertBtn.classList.toggle('active', newInverted[activeAxis]);
         updateSliderFromAxisValue(slider);
         applyClippingPlanes();
     });
@@ -523,7 +525,7 @@ function setupCuttingControls() {
     });
 
     // Подписка на изменения store
-    cutting3dStore.subscribeActive((isActive) => {
+    store.subscribe('cutting3d.isActive', (isActive) => {
         if (!isActive) {
             closePanel(panel, toggleBtn, axisBtns, slider, invertBtn);
         }
@@ -539,7 +541,7 @@ function openPanel(panel, toggleBtn, axisBtns, slider, invertBtn) {
 
     enableCutting();
 
-    const activeAxis = cutting3dStore.getActiveAxis();
+    const activeAxis = store.getState('cutting3d.activeAxis');
     if (activeAxis) {
         updateAxisUI(axisBtns, invertBtn, slider);
     }
@@ -564,7 +566,7 @@ function closePanel(panel, toggleBtn, axisBtns, slider, invertBtn) {
  * Обновляет UI при выборе оси
  */
 function updateAxisUI(axisBtns, invertBtn, slider) {
-    const activeAxis = cutting3dStore.getActiveAxis();
+    const activeAxis = store.getState('cutting3d.activeAxis');
 
     axisBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.axis === activeAxis);
@@ -572,7 +574,7 @@ function updateAxisUI(axisBtns, invertBtn, slider) {
 
     slider.disabled = false;
     invertBtn.disabled = false;
-    invertBtn.classList.toggle('active', cutting3dStore.getInvertedAxes()[activeAxis]);
+    invertBtn.classList.toggle('active', store.getState('cutting3d.invertedAxes')[activeAxis]);
     updateSliderFromAxisValue(slider);
 }
 
@@ -580,13 +582,13 @@ function updateAxisUI(axisBtns, invertBtn, slider) {
  * Обновляет значение слайдера из текущего значения оси
  */
 function updateSliderFromAxisValue(slider) {
-    const activeAxis = cutting3dStore.getActiveAxis();
+    const activeAxis = store.getState('cutting3d.activeAxis');
     if (!activeAxis) return;
 
-    const bounds = cutting3dStore.getAxisBounds()[activeAxis];
-    const axisValues = cutting3dStore.getAxisValues();
+    const bounds = store.getState('cutting3d.axisBounds')[activeAxis];
+    const axisValues = store.getState('cutting3d.axisValues');
     const value = axisValues[activeAxis];
-    const invertedAxes = cutting3dStore.getInvertedAxes();
+    const invertedAxes = store.getState('cutting3d.invertedAxes');
     const inverted = invertedAxes[activeAxis];
 
     const percent = inverted
@@ -600,36 +602,39 @@ function updateSliderFromAxisValue(slider) {
  * Обновляет значение оси из слайдера
  */
 function updateAxisValueFromSlider(percent) {
-    const activeAxis = cutting3dStore.getActiveAxis();
+    const activeAxis = store.getState('cutting3d.activeAxis');
     if (!activeAxis) return;
 
-    const bounds = cutting3dStore.getAxisBounds()[activeAxis];
-    const inverted = cutting3dStore.getInvertedAxes()[activeAxis];
+    const bounds = store.getState('cutting3d.axisBounds')[activeAxis];
+    const inverted = store.getState('cutting3d.invertedAxes')[activeAxis];
 
     const value = inverted
         ? bounds.min + percent * (bounds.max - bounds.min)
         : bounds.max - percent * (bounds.max - bounds.min);
 
-    cutting3dStore.setAxisValue(activeAxis, value);
+        store.setState('cutting3d.axisValues', { ...store.getState('cutting3d.axisValues'), [activeAxis]: value });
 }
 
 /**
  * Сбрасывает все настройки сечения
  */
 function resetCutting(axisBtns, slider, invertBtn) {
-    const bounds = cutting3dStore.getAxisBounds();
+    const bounds = store.getState('cutting3d.axisBounds');
 
     ['x', 'y', 'z'].forEach(axis => {
-        cutting3dStore.setAxisValue(axis, bounds[axis].max);
-        cutting3dStore.invertAxis(axis); // Сброс в false
+        store.setState('cutting3d.axisValues', { ...store.getState('cutting3d.axisValues'), [axis]: bounds[axis].max });
+        const currentInverted = store.getState('cutting3d.invertedAxes');
+        if (currentInverted[axis]) {
+            store.setState('cutting3d.invertedAxes', { ...currentInverted, [axis]: false });
+        }
     });
 
     // Принудительно устанавливаем false для всех осей
-    cutting3dStore.setInvertedAxes({ x: false, y: false, z: false });
+    store.setState('cutting3d.invertedAxes', { x: false, y: false, z: false });
 
     invertBtn.classList.remove('active');
 
-    cutting3dStore.setActiveAxis(null);
+    store.setState('cutting3d.activeAxis', null);
     axisBtns.forEach(btn => btn.classList.remove('active'));
     slider.disabled = true;
     invertBtn.disabled = true;
@@ -701,14 +706,14 @@ export function getClippingPlanes() {
  * Проверяет, активно ли сечение
  */
 export function isCuttingActive() {
-    return cutting3dStore.isActive();
+    return store.getState('cutting3d.isActive');
 }
 
 /**
  * Обновляет цвет заглушек
  */
 export function updateCapColor() {
-    if (!cutting3dStore.isActive()) return;
+    if (!store.getState('cutting3d.isActive')) return;
 
     const newColor = capOptions.useModelColor
         ? getModelBaseColor()

@@ -3,14 +3,14 @@
  * Интегрирован с store для сохранения состояния
  */
 
-import { uiStore, drawingStore } from '../store.js';
+import { store } from '../store.js';
 
 /**
  * Получает текущий режим из store
  * @returns {string} '3D' или '2D'
  */
 function getCurrentMode() {
-    return uiStore.getCurrentMode() || '3D';
+    return store.getState('ui.currentMode') || '3D';
 }
 
 export const ZoomManager = {

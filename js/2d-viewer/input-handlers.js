@@ -3,14 +3,14 @@
  * Интегрирован с store
  */
 
-import { uiStore, drawingStore } from '../store.js';
+import { store } from '../store.js';
 
 /**
  * Проверяет, активен ли 2D режим
  * @returns {boolean}
  */
 function is2DMode() {
-    return uiStore.getCurrentMode() === '2D';
+    return store.getState('ui.currentMode') === '2D';
 }
 
 export const InputHandlers = {

@@ -165,9 +165,29 @@ p {
     }
 }
 
-/* Темная тема */
+/* Темная тема (ручное переключение) - приоритет над системной */
+[data-theme="dark"] {
+    --background-color: #1a1a1a;
+    --card-background: #2d2d2d;
+    --text-color: #ffffff;
+    --text-secondary: #cccccc;
+    --border-color: #404040;
+    --button-color: #1e1e2899;
+}
+
+/* Светлая тема (ручное переключение) */
+[data-theme="light"] {
+    --background-color: #ffffff;
+    --card-background: #f5f5f5;
+    --text-color: #333333;
+    --text-secondary: #666666;
+    --border-color: #e0e0e0;
+    --button-color: #f0f0f099;
+}
+
+/* Системная тема (если не задана ручная) */
 @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme]) {
         --background-color: #1a1a1a;
         --card-background: #2d2d2d;
         --text-color: #ffffff;

@@ -3,7 +3,7 @@
  * Отвечает за изменение размера панели информации и переключение вкладок
  */
 
-import { uiStore, specificationStore } from './store.js';
+import { store } from './store.js';
 import { SpecificationService } from './services/specificationService.js';
 
 // ============================================================
@@ -36,10 +36,9 @@ export class ResizeHandler {
         this.lastResizeCall = 0;
         this.resizeThrottleDelay = RESIZE_THROTTLE_DELAY;
         this.resizeTimeout = null;
-        this.rafId = null; // Для requestAnimationFrame
 
         // Инициализируем из store или localStorage
-        this.currentView = uiStore.getCurrentView() || this.restoreViewState();
+        this.currentView = store.getState('ui.currentView') || this.restoreViewState();
         
         this.init();
         this.initViewToggle();
@@ -97,7 +96,7 @@ export class ResizeHandler {
         });
 
         // Подписка на изменения UI store
-        uiStore.subscribeCurrentView((view) => {
+        store.subscribe('ui.currentView', (view) => {
             if (view && view !== this.currentView) {
                 this.currentView = view;
                 this.showCurrentView();
@@ -158,14 +157,19 @@ export class ResizeHandler {
     }
 
     throttledWindowResize() {
-        // Используем requestAnimationFrame для плавности вместо setTimeout
-        if (this.rafId) return; // Уже запланировано
+        const now = Date.now();
 
-        this.rafId = requestAnimationFrame(() => {
+        if (now - this.lastResizeCall >= this.resizeThrottleDelay) {
             this.callWindowResize();
-            this.rafId = null;
-            this.lastResizeCall = performance.now();
-        });
+            this.lastResizeCall = now;
+        } else {
+            if (this.resizeTimeout) {
+                clearTimeout(this.resizeTimeout);
+            }
+            this.resizeTimeout = setTimeout(() => {
+                this.callWindowResize();
+            }, this.resizeThrottleDelay);
+        }
     }
 
     callWindowResize() {
@@ -179,7 +183,7 @@ export class ResizeHandler {
         this.infoPanel.style.height = `${newHeight}px`;
 
         // Сохраняем в store
-        uiStore.setInfoPanelHeight(newHeight);
+        store.setState('ui.infoPanelHeight', newHeight);
 
         const handleHeight = this.handle.offsetHeight || 20;
         const containerHeight = window.innerHeight - newHeight - handleHeight - 80;
@@ -204,10 +208,9 @@ export class ResizeHandler {
         this.infoPanel.style.transition = '';
         document.body.style.cursor = '';
 
-        // Отменяем запланированный requestAnimationFrame
-        if (this.rafId) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
+        if (this.resizeTimeout) {
+            clearTimeout(this.resizeTimeout);
+            this.resizeTimeout = null;
         }
 
         this.callWindowResize();
@@ -221,12 +224,12 @@ export class ResizeHandler {
     saveHeight() {
         const height = parseInt(getComputedStyle(this.infoPanel).height, 10);
         localStorage.setItem('infoPanelHeight', height);
-        uiStore.setInfoPanelHeight(height);
+        store.setState('ui.infoPanelHeight', height);
     }
 
     restoreHeight() {
         // Сначала пробуем из store
-        let savedHeight = uiStore.getInfoPanelHeight();
+        let savedHeight = store.getState('ui.infoPanelHeight');
         
         // Затем из localStorage
         if (!savedHeight) {
@@ -281,10 +284,10 @@ export class ResizeHandler {
     toggleView() {
         const newView = this.currentView === 'specification' ? 'cutting' : 'specification';
         this.currentView = newView;
-        
+
         // Сохраняем в store
-        uiStore.setCurrentView(newView);
-        
+        store.setState('ui.currentView', newView);
+
         this.showCurrentView();
         this.updateToggleIcon();
     }
@@ -300,10 +303,10 @@ export class ResizeHandler {
         }
 
         // Восстанавливаем выделение если на вкладке спецификации
-        if (this.currentView === 'specification' && specificationStore.getSelectedPart()) {
+        if (this.currentView === 'specification' && store.getState('specification.lastSelectedPart')) {
             setTimeout(() => {
                 const rows = document.querySelectorAll('.part-row');
-                const selectedPart = specificationStore.getSelectedPart();
+                const selectedPart = store.getState('specification.lastSelectedPart');
                 
                 rows.forEach(row => {
                     const partName = row.getAttribute('data-part-name');
@@ -338,7 +341,7 @@ export class ResizeHandler {
     setView(view) {
         if (view === 'specification' || view === 'cutting') {
             this.currentView = view;
-            uiStore.setCurrentView(view);
+            store.setState('ui.currentView', view);
             this.showCurrentView();
             this.updateToggleIcon();
         }

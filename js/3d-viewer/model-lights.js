@@ -87,8 +87,8 @@ export function setupLights(scene) {
     scene.add(cameraLight);
 
     // Добавляем визуализатор позиции света для отладки (опционально)
-    const lightHelper = new THREE.DirectionalLightHelper(cameraLight, 1);
-    scene.add(lightHelper);
+    // const lightHelper = new THREE.DirectionalLightHelper(cameraLight, 1);
+    // scene.add(lightHelper);
 
     console.log('Lights setup complete. Camera light created.');
 

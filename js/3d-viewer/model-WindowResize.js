@@ -57,7 +57,7 @@ function createResizeHandler(camera, renderer, gridHelper, model) {
 function initResizeListener(camera, renderer, gridHelper, model) {
     const resizeHandler = createResizeHandler(camera, renderer, gridHelper, model);
     window.addEventListener('resize', resizeHandler);
-    
+
     // Возвращаем функцию для удаления слушателя
     return function() {
         window.removeEventListener('resize', resizeHandler);

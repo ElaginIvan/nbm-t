@@ -5,7 +5,7 @@
 
 import { DataService } from './dataService.js';
 import { SpecificationService, cleanName } from './services/specificationService.js';
-import { specificationStore, modelStore, uiStore, drawingStore } from './store.js';
+import { store } from './store.js';
 
 // ============================================================
 // Рендеринг спецификации
@@ -84,13 +84,13 @@ function attachTableEventListeners() {
             }
 
             // Если включен 2D режим, загружаем чертеж
-            if (uiStore.getCurrentMode() === '2D') {
+            if (store.getState('ui.currentMode') === '2D') {
                 loadDrawingForPart(partName);
             }
 
             // Если мы находимся на вкладке раскроя, переключаемся на спецификацию
-            if (uiStore.getCurrentView() === 'cutting') {
-                uiStore.setCurrentView('specification');
+            if (store.getState('ui.currentView') === 'cutting') {
+                store.setState('ui.currentView', 'specification');
             }
         });
     });
@@ -119,7 +119,7 @@ function loadDrawingForPart(partName) {
  * Подписывается на изменения выбранной детали и обновляет UI
  */
 function subscribeToSelectedPart() {
-    specificationStore.subscribeSelectedPart((partName) => {
+    store.subscribe('specification.lastSelectedPart', (partName) => {
         // Обновляем активный класс в таблице
         const rows = document.querySelectorAll('.part-row');
         rows.forEach(row => {
@@ -137,7 +137,7 @@ function subscribeToSelectedPart() {
  * Подписывается на изменения структуры и перерисовывает таблицу
  */
 function subscribeToStructure() {
-    specificationStore.subscribeStructure((structure) => {
+    store.subscribe('specification.structure', (structure) => {
         if (structure && structure.length > 0) {
             renderSpecificationTable(structure);
             // Обработчики добавляются внутри renderSpecificationTable
@@ -245,19 +245,19 @@ window.SpecificationService = SpecificationService;
 window.Specification = {
     highlightParts: (partName, hideOthers) => SpecificationService.highlightParts(partName, hideOthers),
     showAllParts: () => SpecificationService.showAllParts(),
-    getLastSelectedPart: () => specificationStore.getSelectedPart(),
+    getLastSelectedPart: () => store.getState('specification.lastSelectedPart'),
     saveModelStructure: (model, projectId) => SpecificationService.saveModelStructure(model, projectId),
     get structure() {
-        return specificationStore.getStructure();
+        return store.getState('specification.structure');
     },
     get csvData() {
-        return specificationStore.getCSVData();
+        return store.getState('specification.csvData');
     },
     set lastSelectedPart(value) {
-        specificationStore.setSelectedPart(value);
+        store.setState('specification.lastSelectedPart', value);
     },
     get lastSelectedPart() {
-        return specificationStore.getSelectedPart();
+        return store.getState('specification.lastSelectedPart');
     }
 };
 

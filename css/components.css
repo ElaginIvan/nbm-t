@@ -16,7 +16,6 @@
     border-radius: var(--radius-lg);
     overflow: hidden;
     box-shadow: var(--shadow-md);
-    background: var(--background-color);
     transition: all 0.3s ease;
 }
 
@@ -306,6 +305,7 @@
 .back-button,
 .expand-button,
 .toggle-3d-2d-button,
+.settings-button,
 .drawing-btn {
     background: var(--button-color);
     gap: var(--spacing-sm);
@@ -329,6 +329,7 @@
 .back-button svg,
 .expand-button svg,
 .toggle-3d-2d-button svg,
+.settings-button svg,
 .drawing-btn svg {
     fill: var(--text-color);
     height: 21px;
@@ -398,6 +399,7 @@
     .back-button,
     .expand-button,
     .toggle-3d-2d-button,
+    .settings-button,
     .drawing-btn {
         height: 24px;
         width: 46px;

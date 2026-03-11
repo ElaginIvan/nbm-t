@@ -3,7 +3,7 @@
  * С кэшированием и обработкой ошибок
  */
 
-import { projectStore } from './store.js';
+import { store } from './store.js';
 
 // Кэш для проектов
 const projectsCache = {
@@ -60,7 +60,7 @@ export const DataService = {
                 
             } catch (error) {
                 console.error('Error loading projects:', error);
-                projectStore.setError(error.message);
+                store.setState('project.error', error.message);
                 
                 // Возвращаем кэш если есть
                 if (projectsCache.data) {
@@ -99,13 +99,13 @@ export const DataService = {
             }
             
             // Обновляем store
-            projectStore.setData(project);
-            projectStore.setCurrentId(projectId);
+            store.setState('project.data', project);
+            store.setState('project.currentId', projectId);
             
             return project;
         } catch (error) {
             console.error('Error loading project data:', error);
-            projectStore.setError(error.message);
+            store.setState('project.error', error.message);
             return null;
         }
     },
@@ -116,7 +116,7 @@ export const DataService = {
      */
     setSelectedProject(projectId) {
         localStorage.setItem('selectedProject', projectId);
-        projectStore.setCurrentId(projectId);
+        store.setState('project.currentId', projectId);
     },
 
     /**
@@ -125,11 +125,11 @@ export const DataService = {
      */
     getSelectedProject() {
         // Сначала пробуем из store
-        const fromStore = projectStore.getCurrentId();
+        const fromStore = store.getState('project.currentId');
         if (fromStore) {
             return fromStore;
         }
-        
+
         // Затем из localStorage
         return localStorage.getItem('selectedProject');
     },

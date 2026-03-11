@@ -14,7 +14,7 @@ import { addEdgesToObject } from './model-geometry.js';
 import { setupCamera } from './model-camera.js';
 import { onWindowResize as handleWindowResize, initResizeListener } from './model-WindowResize.js';
 
-import { modelStore, projectStore, specificationStore } from '../store.js';
+import { store } from '../store.js';
 import { SpecificationService } from '../services/specificationService.js';
 
 // ============================================================
@@ -64,7 +64,7 @@ function getModelColor() {
         return DEFAULT_MODEL_COLOR;
     }
 
-    const project = projectStore.getData();
+    const project = store.getState('project.data');
     if (project?.modelColor) {
         return project.modelColor;
     }
@@ -235,6 +235,9 @@ function loadModel() {
                 }
             });
 
+            // Добавляем ребра к модели
+            addEdgesToObject(model);
+
             initCuttingTool(scene, model, renderer);
 
             createAdaptiveGrid(scene);
@@ -261,9 +264,9 @@ function loadModel() {
             canvas.addEventListener('dblclick', resetView);
 
             // Обновляем store
-            modelStore.setObject(model);
-            modelStore.setLoaded(true);
-            modelStore.setPath(modelPath);
+            store.setState('model.object', model);
+            store.setState('model.isLoaded', true);
+            store.setState('model.path', modelPath);
 
             modelLoaded = true;
 
@@ -285,7 +288,7 @@ function loadModel() {
             }));
 
             // Сохраняем структуру модели через сервис
-            const projectId = projectStore.getCurrentId();
+            const projectId = store.getState('project.currentId');
             if (projectId) {
                 setTimeout(() => {
                     SpecificationService.saveModelStructure(model, projectId);

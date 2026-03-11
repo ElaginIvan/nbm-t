@@ -1,9 +1,9 @@
 /**
  * Модуль загрузки и управления чертежами
- * Интегрирован с drawingStore
+ * Интегрирован с store
  */
 
-import { drawingStore } from '../store.js';
+import { store } from '../store.js';
 
 // Кэш для результатов поиска чертежей
 const drawingsCache = new Map();
@@ -82,7 +82,7 @@ export const DrawingLoader = {
             // Используем кэшированные данные
             if (cachedDrawings.length === 0) {
                 this.showNoDrawingFound(cleanDesignation);
-                drawingStore.setCurrentPart(null);
+                store.setState('drawing.currentPart', null);
                 this.currentDrawings = null;
                 if (window.UIManager) {
                     window.UIManager.removeMultiDrawingControls();
@@ -91,7 +91,7 @@ export const DrawingLoader = {
             }
             
             // Восстанавливаем из кэша
-            drawingStore.setCurrentPart(designation);
+            store.setState('drawing.currentPart', designation);
             this.currentDrawings = {
                 files: cachedDrawings,
                 currentIndex: 0,
@@ -113,7 +113,7 @@ export const DrawingLoader = {
         }
 
         // Сохраняем текущую деталь в store
-        drawingStore.setCurrentPart(designation);
+        store.setState('drawing.currentPart', designation);
 
         const drawings = await this.findDrawingsByPattern(cleanDesignation, projectId);
         
@@ -124,7 +124,7 @@ export const DrawingLoader = {
             this.showNoDrawingFound(cleanDesignation);
 
             // Очищаем состояние
-            drawingStore.setCurrentPart(null);
+            store.setState('drawing.currentPart', null);
             this.currentDrawings = null;
 
             // Удаляем элементы управления

@@ -4,7 +4,7 @@
  */
 
 import { CuttingService, getProjectId } from './services/cuttingService.js';
-import { cuttingStore, specificationStore } from './store.js';
+import { store } from './store.js';
 
 // ============================================================
 // Визуализация результатов
@@ -232,9 +232,9 @@ async function initializeCuttingCalculator() {
         }
 
         // Сохраняем настройки в store
-        cuttingStore.updateSetting('stockLength', stockLength);
-        cuttingStore.updateSetting('kerf', kerf);
-        cuttingStore.updateSetting('multiplicity', multiplicity);
+        store.setState('cutting.settings.stockLength', stockLength);
+        store.setState('cutting.settings.kerf', kerf);
+        store.setState('cutting.settings.multiplicity', multiplicity);
 
         // Показываем индикатор загрузки
         resultsContainer.innerHTML = `

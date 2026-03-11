@@ -3,8 +3,6 @@
  * Использует паттерн Observer для подписки на изменения
  */
 
-const STATE_VERSION = '1.0.0';
-
 /**
  * Глубокое клонирование с поддержкой Map, Set, Date
  * @param {*} obj - Объект для клонирования
@@ -93,7 +91,15 @@ const initialState = {
         currentMode: '3D', // '3D' | '2D'
         infoPanelHeight: null,
         isFullscreen: false,
-        activeContainer: 'model' // 'model' | 'drawing'
+        activeContainer: 'model', // 'model' | 'drawing'
+        settings: {
+            modelColor: '#CCCCCC',
+            modelMetalness: 0.1,
+            modelRoughness: 0.75,
+            gridVisible: true,
+            gridSize: 1000,
+            themeMode: 'auto' // 'auto' | 'light' | 'dark'
+        }
     },
 
     // 2D чертежи
@@ -256,147 +262,20 @@ class Store {
 // Создаём экземпляр store
 export const store = new Store(initialState);
 
-// ============================================================
-// Хелперы для удобной работы с состоянием
-// ============================================================
-
-export const projectStore = {
-    get: () => store.getState('project'),
-    getCurrentId: () => store.getState('project.currentId'),
-    getData: () => store.getState('project.data'),
-    setCurrentId: (id) => store.setState('project.currentId', id),
-    setData: (data) => store.setState('project.data', data),
-    setLoading: (isLoading) => store.setState('project.isLoading', isLoading),
-    setError: (error) => store.setState('project.error', error),
-    
-    subscribe: (callback) => store.subscribe('project', callback)
-};
-
-export const modelStore = {
-    get: () => store.getState('model'),
-    getObject: () => store.getState('model.object'),
-    isLoaded: () => store.getState('model.isLoaded'),
-    
-    setObject: (object) => store.setState('model.object', object),
-    setLoaded: (isLoaded) => store.setState('model.isLoaded', isLoaded),
-    setColor: (color) => store.setState('model.color', color),
-    setPath: (path) => store.setState('model.path', path),
-    
-    subscribe: (callback) => store.subscribe('model', callback),
-    subscribeLoaded: (callback) => store.subscribe('model.isLoaded', callback)
-};
-
-export const cutting3dStore = {
-    get: () => store.getState('cutting3d'),
-    isActive: () => store.getState('cutting3d.isActive'),
-    getActiveAxis: () => store.getState('cutting3d.activeAxis'),
-    getAxisValues: () => store.getState('cutting3d.axisValues'),
-    getAxisBounds: () => store.getState('cutting3d.axisBounds'),
-    getInvertedAxes: () => store.getState('cutting3d.invertedAxes'),
-
-    setActive: (isActive) => store.setState('cutting3d.isActive', isActive),
-    setActiveAxis: (axis) => store.setState('cutting3d.activeAxis', axis),
-    setAxisValues: (values) => store.setState('cutting3d.axisValues', values),
-    setAxisValue: (axis, value) => {
-        const current = store.getState('cutting3d.axisValues');
-        // Используем cascade: false для уменьшения лишних уведомлений
-        store.setState('cutting3d.axisValues', { ...current, [axis]: value }, { cascade: false });
-    },
-    setAxisBounds: (bounds) => store.setState('cutting3d.axisBounds', bounds),
-    setInvertedAxes: (inverted) => store.setState('cutting3d.invertedAxes', inverted),
-    invertAxis: (axis) => {
-        const current = store.getState('cutting3d.invertedAxes');
-        store.setState('cutting3d.invertedAxes', { ...current, [axis]: !current[axis] });
-    },
-
-    subscribe: (callback) => store.subscribe('cutting3d', callback),
-    subscribeActive: (callback) => store.subscribe('cutting3d.isActive', callback),
-    subscribeActiveAxis: (callback) => store.subscribe('cutting3d.activeAxis', callback)
-};
-
-export const specificationStore = {
-    get: () => store.getState('specification'),
-    getStructure: () => store.getState('specification.structure'),
-    getCSVData: () => store.getState('specification.csvData'),
-    getSelectedPart: () => store.getState('specification.lastSelectedPart'),
-    
-    setStructure: (structure) => store.setState('specification.structure', structure),
-    setCSVData: (csvData) => store.setState('specification.csvData', csvData),
-    setSelectedPart: (partName) => store.setState('specification.lastSelectedPart', partName),
-    setLoading: (isLoading) => store.setState('specification.isLoading', isLoading),
-    
-    subscribe: (callback) => store.subscribe('specification', callback),
-    subscribeStructure: (callback) => store.subscribe('specification.structure', callback),
-    subscribeSelectedPart: (callback) => store.subscribe('specification.lastSelectedPart', callback)
-};
-
-export const cuttingStore = {
-    get: () => store.getState('cutting'),
-    getMaterialsData: () => store.getState('cutting.materialsData'),
-    getSettings: () => store.getState('cutting.settings'),
-    getResults: () => store.getState('cutting.results'),
-    
-    setMaterialsData: (data) => store.setState('cutting.materialsData', data),
-    setSettings: (settings) => store.setState('cutting.settings', settings),
-    updateSetting: (key, value) => {
-        const current = store.getState('cutting.settings');
-        store.setState('cutting.settings', { ...current, [key]: value });
-    },
-    setResults: (results) => store.setState('cutting.results', results),
-    setLoading: (isLoading) => store.setState('cutting.isLoading', isLoading),
-    
-    subscribe: (callback) => store.subscribe('cutting', callback),
-    subscribeMaterialsData: (callback) => store.subscribe('cutting.materialsData', callback)
-};
-
-export const uiStore = {
-    get: () => store.getState('ui'),
-    getCurrentView: () => store.getState('ui.currentView'),
-    getCurrentMode: () => store.getState('ui.currentMode'),
-    getInfoPanelHeight: () => store.getState('ui.infoPanelHeight'),
-    isFullscreen: () => store.getState('ui.isFullscreen'),
-    getActiveContainer: () => store.getState('ui.activeContainer'),
-    
-    setCurrentView: (view) => store.setState('ui.currentView', view),
-    setCurrentMode: (mode) => store.setState('ui.currentMode', mode),
-    setInfoPanelHeight: (height) => store.setState('ui.infoPanelHeight', height),
-    setFullscreen: (isFullscreen) => store.setState('ui.isFullscreen', isFullscreen),
-    setActiveContainer: (container) => store.setState('ui.activeContainer', container),
-    
-    subscribe: (callback) => store.subscribe('ui', callback),
-    subscribeCurrentView: (callback) => store.subscribe('ui.currentView', callback),
-    subscribeCurrentMode: (callback) => store.subscribe('ui.currentMode', callback)
-};
-
-export const drawingStore = {
-    get: () => store.getState('drawing'),
-    getCurrentPart: () => store.getState('drawing.currentPart'),
-    getImage: (partName) => store.getState('drawing.images')?.get(partName),
-    
-    setCurrentPart: (partName) => store.setState('drawing.currentPart', partName),
-    addImage: (partName, image) => {
-        const images = store.getState('drawing.images') || new Map();
-        images.set(partName, image);
-        store.setState('drawing.images', images);
-    },
-    setLoading: (isLoading) => store.setState('drawing.isLoading', isLoading),
-    
-    subscribe: (callback) => store.subscribe('drawing', callback),
-    subscribeCurrentPart: (callback) => store.subscribe('drawing.currentPart', callback)
-};
+// Восстанавливаем настройки UI из localStorage
+const savedSettings = localStorage.getItem('uiSettings');
+if (savedSettings) {
+    try {
+        const parsed = JSON.parse(savedSettings);
+        store.setState('ui.settings', { ...store.getState('ui.settings'), ...parsed }, { silent: true });
+    } catch (e) {
+        console.warn('Failed to parse saved UI settings:', e);
+    }
+}
 
 // Экспортируем для отладки в консоли
 if (typeof window !== 'undefined') {
     window.__STORE__ = store;
-    window.__STORE_HELPERS__ = {
-        projectStore,
-        modelStore,
-        cutting3dStore,
-        specificationStore,
-        cuttingStore,
-        uiStore,
-        drawingStore
-    };
 }
 
 export default store;

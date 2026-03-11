@@ -3,7 +3,7 @@
  * Интегрирован с store
  */
 
-import { uiStore, drawingStore } from '../store.js';
+import { store } from '../store.js';
 
 export const UIManager = {
     /**
@@ -35,7 +35,7 @@ export const UIManager = {
         }
 
         // Сохраняем режим в store
-        uiStore.setCurrentMode(mode);
+        store.setState('ui.currentMode', mode);
     },
 
     /**

@@ -4,7 +4,7 @@
  */
 
 import { DataService } from './dataService.js';
-import { projectStore } from './store.js';
+import { store } from './store.js';
 
 // ============================================================
 // Утилиты для работы с DOM
@@ -209,7 +209,7 @@ export const Gallery = {
      * @returns {Array|null}
      */
     getProjects() {
-        return projectStore.getData();
+        return store.getState('project.data');
     }
 };
 
