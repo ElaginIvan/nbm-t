@@ -30,12 +30,6 @@ let gridHelper = null;
 let isGridVisible = true;
 let originalGridOpacity = 0.5;
 
-/**
- * Глобальная константа цвета модели
- * Установите null чтобы использовать цвет из projects.json или цвет модели по умолчанию
- */
-const DEFAULT_MODEL_COLOR = null;
-
 // Флаг для отслеживания состояния загрузки
 let modelLoaded = false;
 let modelLoadCallbacks = [];
@@ -56,20 +50,40 @@ function onModelLoaded(callback) {
 }
 
 /**
- * Получает цвет модели из projects.json или глобальной константы
+ * Получает цвет модели из localStorage
  * @returns {string|null} Цвет в формате hex или null
  */
 function getModelColor() {
-    if (DEFAULT_MODEL_COLOR) {
-        return DEFAULT_MODEL_COLOR;
+    const savedSettings = localStorage.getItem('uiSettings');
+    if (savedSettings) {
+        try {
+            const { modelColor } = JSON.parse(savedSettings);
+            return modelColor || null;
+        } catch (e) {
+            console.warn('Failed to parse model color from settings:', e);
+        }
     }
-
-    const project = store.getState('project.data');
-    if (project?.modelColor) {
-        return project.modelColor;
-    }
-
     return null;
+}
+
+/**
+ * Получает настройки материала из localStorage
+ * @returns {Object} Настройки материала { metalness, roughness }
+ */
+function getMaterialSettings() {
+    const savedSettings = localStorage.getItem('uiSettings');
+    if (savedSettings) {
+        try {
+            const { modelMetalness, modelRoughness } = JSON.parse(savedSettings);
+            return {
+                metalness: modelMetalness !== undefined ? modelMetalness : 0.1,
+                roughness: modelRoughness !== undefined ? modelRoughness : 0.75
+            };
+        } catch (e) {
+            console.warn('Failed to parse material settings from settings:', e);
+        }
+    }
+    return { metalness: 0.1, roughness: 0.75 };
 }
 
 /**
@@ -217,6 +231,16 @@ function loadModel() {
                 console.log('Model color applied:', modelColor);
             }
 
+            // Применяем настройки материала (metalness, roughness)
+            const materialSettings = getMaterialSettings();
+            model.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    child.material.metalness = materialSettings.metalness;
+                    child.material.roughness = materialSettings.roughness;
+                }
+            });
+            console.log('Model material settings applied:', materialSettings);
+
             // Центрирование
             const box = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
@@ -234,9 +258,6 @@ function loadModel() {
                     child.receiveShadow = true;
                 }
             });
-
-            // Добавляем ребра к модели
-            addEdgesToObject(model);
 
             initCuttingTool(scene, model, renderer);
 

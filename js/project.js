@@ -163,9 +163,6 @@ const ProjectInfo = {
             projectData.setAttribute('data-model-path', project.modelFile);
             projectData.setAttribute('data-model-name', project.name);
             projectData.setAttribute('data-model-description', project.description);
-            if (project.modelColor) {
-                projectData.setAttribute('data-model-color', project.modelColor);
-            }
         }
     }
 };

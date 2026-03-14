@@ -11,10 +11,21 @@ import { store } from '../store.js';
 // КОНСТАНТЫ И НАСТРОЙКИ
 // ============================================================
 
+// Читаем настройки из localStorage
+let savedSettings = {};
+try {
+    const saved = localStorage.getItem('uiSettings');
+    if (saved) {
+        savedSettings = JSON.parse(saved);
+    }
+} catch (e) {
+    console.warn('Failed to parse saved settings:', e);
+}
+
 const capOptions = {
     color: null,           // null = использовать цвет модели
-    metalness: 0.1,
-    roughness: 0.75,
+    metalness: savedSettings.modelMetalness !== undefined ? savedSettings.modelMetalness : 0.1,
+    roughness: savedSettings.modelRoughness !== undefined ? savedSettings.modelRoughness : 0.75,
     planeSize: 100,
     useModelColor: true
 };
@@ -727,7 +738,7 @@ export function updateCapColor() {
 }
 
 // Экспорт по умолчанию
-export default {
+export const ModelCut = {
     initCuttingTool,
     enableCutting,
     disableCutting,
@@ -738,3 +749,8 @@ export default {
     isCuttingActive,
     updateCapColor
 };
+
+export default ModelCut;
+
+// Экспортируем для совместимости
+window.ModelCut = ModelCut;

@@ -1,5 +1,5 @@
 /* ============================================================
-   Settings Modal
+   Settings Modal - Стильный дизайн
    ============================================================ */
 
 /* Модальное окно */
@@ -10,147 +10,384 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: var(--background-color);
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
     z-index: 2000;
     justify-content: center;
     align-items: center;
-    transition: opacity 0.3s ease; 
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
 .settings-modal.active {
     display: flex;
+    opacity: 1;
 }
 
 .settings-modal-content {
     background: var(--card-background);
     border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
     width: 90%;
-    max-width: 500px;
+    max-width: 480px;
     max-height: 80vh;
     overflow: hidden;
-    animation: settingsSlideIn 0.3s ease;
+    animation: settingsSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-origin: center;
 }
 
 @keyframes settingsSlideIn {
     from {
-        transform: translateY(-20px);
+        transform: translateY(-30px) scale(0.95);
         opacity: 0;
     }
 
     to {
-        transform: translateY(0);
+        transform: translateY(0) scale(1);
         opacity: 1;
     }
 }
 
+/* Заголовок */
 .settings-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px;
+    padding: var(--spacing-lg) var(--spacing-lg);
     border-bottom: 1px solid var(--border-color);
+    background: linear-gradient(135deg, var(--card-background) 0%, rgba(74, 158, 255, 0.05) 100%);
 }
 
 .settings-header h2 {
     margin: 0;
-    font-size: 18px;
+    font-size: 1.25rem;
+    font-weight: 600;
     color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.settings-header h2::before {
+    content: '';
+    width: 4px;
+    height: 20px;
+    background: linear-gradient(180deg, var(--primary-color) 0%, #2c7be5 100%);
+    border-radius: 2px;
 }
 
 .settings-close {
-    background: none;
+    background: rgba(100, 149, 237, 0.1);
     border: none;
     cursor: pointer;
-    padding: 4px;
+    padding: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    transition: var(--transition);
+    border-radius: 50%;
+    transition: all var(--transition);
+    width: 36px;
+    height: 36px;
 }
 
 .settings-close:hover {
-    background: var(--bg-secondary);
+    background: rgba(100, 149, 237, 0.2);
+    transform: rotate(90deg);
 }
 
 .settings-close svg {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     fill: var(--text-color);
 }
 
+/* Тело настроек */
 .settings-body {
-    padding: 10px;
+    padding: var(--spacing-lg);
     overflow-y: auto;
-    max-height: calc(80vh - 80px);
+    max-height: calc(80vh - 100px);
 }
 
+.settings-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.settings-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.settings-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.settings-body::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* Секции */
 .settings-section {
-    margin-bottom: 24px;
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .settings-section:last-child {
     margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
 }
 
 .settings-section h3 {
-    margin: 0 0 16px 0;
-    font-size: 14px;
+    margin: 0 0 var(--spacing-md) 0;
+    font-size: 0.75rem;
+    font-weight: 600;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
 }
 
+.settings-section h3::before {
+    content: '';
+    width: 2px;
+    height: 12px;
+    background: var(--primary-color);
+    border-radius: 1px;
+}
+
+/* Элементы настроек */
 .setting-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border-color);
+    padding: var(--spacing-md) 0;
+    border-bottom: 1px solid rgba(224, 224, 224, 0.5);
+    transition: all var(--transition);
+}
+
+.setting-item:first-child {
+    padding-top: 0;
 }
 
 .setting-item:last-child {
     border-bottom: none;
+    padding-bottom: 0;
+}
+
+.setting-item:hover {
+    padding-left: var(--spacing-sm);
+    padding-right: var(--spacing-sm);
+    margin: 0 calc(-1 * var(--spacing-sm));
+    padding-left: var(--spacing-sm);
+    border-radius: var(--radius-md);
+    background: rgba(74, 158, 255, 0.03);
 }
 
 .setting-item label {
-    font-size: 14px;
+    font-size: 0.95rem;
     color: var(--text-color);
+    font-weight: 400;
 }
 
+/* Инпуты */
 .setting-item input[type="color"] {
-    width: 50px;
-    height: 30px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
+    width: 48px;
+    height: 32px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
     cursor: pointer;
+    padding: 2px;
+    background: var(--card-background);
+    transition: all var(--transition);
+}
+
+.setting-item input[type="color"]:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
+}
+
+.setting-item input[type="color"]::-webkit-color-swatch-wrapper {
     padding: 0;
-    background: var(--bg-primary);
+    border-radius: calc(var(--radius-md) - 2px);
+}
+
+.setting-item input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: calc(var(--radius-md) - 2px);
+}
+
+.setting-item input[type="color"]::-moz-color-swatch {
+    border: none;
+    border-radius: calc(var(--radius-md) - 2px);
 }
 
 .setting-item input[type="range"] {
-    width: 150px;
+    width: 140px;
+    height: 6px;
     cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background: linear-gradient(to right, var(--primary-color) 0%, var(--border-color) 0%);
+    border-radius: 3px;
+    outline: none;
+}
+
+.setting-item input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    background: var(--card-background);
+    border: 2px solid var(--primary-color);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition);
+}
+
+.setting-item input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.2);
+}
+
+.setting-item input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: var(--card-background);
+    border: 2px solid var(--primary-color);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition);
+}
+
+.setting-item input[type="range"]::-moz-range-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.2);
 }
 
 .setting-item input[type="number"] {
-    width: 80px;
-    padding: 6px 10px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    background: var(--bg-primary);
+    width: 90px;
+    padding: 8px 12px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--card-background);
     color: var(--text-color);
-    font-size: 14px;
+    font-size: 0.9rem;
+    transition: all var(--transition);
+    text-align: center;
+}
+
+.setting-item input[type="number"]:hover {
+    border-color: var(--primary-color);
+}
+
+.setting-item input[type="number"]:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
 }
 
 .setting-item input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    background: var(--card-background);
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    transition: all var(--transition);
+}
+
+.setting-item input[type="checkbox"]:hover {
+    border-color: var(--primary-color);
+}
+
+.setting-item input[type="checkbox"]:checked {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #2c7be5 100%);
+    border-color: var(--primary-color);
+}
+
+.setting-item input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+/* Select элементы */
+.setting-item select {
+    padding: 8px 32px 8px 12px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--card-background);
+    color: var(--text-color);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all var(--transition);
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+}
+
+.setting-item select:hover {
+    border-color: var(--primary-color);
+}
+
+.setting-item select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
+}
+
+/* Значения рядом с инпутами */
+.setting-value {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    min-width: 50px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Блокировка прокрутки фона при открытых настройках */
 body.settings-open {
     overflow: hidden;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .settings-modal-content {
+        width: 95%;
+        max-width: none;
+    }
+
+    .settings-header {
+        padding: var(--spacing-md);
+    }
+
+    .settings-body {
+        padding: var(--spacing-md);
+    }
+
+    .setting-item input[type="range"] {
+        width: 120px;
+    }
+
+    .setting-item input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+    }
 }

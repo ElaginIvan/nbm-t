@@ -60,6 +60,16 @@ export const SettingsManager = {
                             <label for="model-color-picker">Цвет модели</label>
                             <input type="color" id="model-color-picker" value="#CCCCCC">
                         </div>
+
+                        <div class="setting-item">
+                            <label for="model-metalness-range">Металличность: <span id="model-metalness-value">0.1</span></label>
+                            <input type="range" id="model-metalness-range" min="0" max="1" step="0.01" value="0.1">
+                        </div>
+
+                        <div class="setting-item">
+                            <label for="model-roughness-range">Шероховатость: <span id="model-roughness-value">0.75</span></label>
+                            <input type="range" id="model-roughness-range" min="0" max="1" step="0.01" value="0.75">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -116,6 +126,30 @@ export const SettingsManager = {
                 this.applyModelColor(e.target.value);
             });
         }
+
+        // Металличность
+        const metalnessRange = document.getElementById('model-metalness-range');
+        const metalnessValue = document.getElementById('model-metalness-value');
+        if (metalnessRange && metalnessValue) {
+            metalnessRange.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                metalnessValue.textContent = value.toFixed(2);
+                this.saveSetting('modelMetalness', value);
+                this.applyModelMetalness(value);
+            });
+        }
+
+        // Шероховатость
+        const roughnessRange = document.getElementById('model-roughness-range');
+        const roughnessValue = document.getElementById('model-roughness-value');
+        if (roughnessRange && roughnessValue) {
+            roughnessRange.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                roughnessValue.textContent = value.toFixed(2);
+                this.saveSetting('modelRoughness', value);
+                this.applyModelRoughness(value);
+            });
+        }
     },
 
     open() {
@@ -144,6 +178,24 @@ export const SettingsManager = {
         const colorPicker = document.getElementById('model-color-picker');
         if (colorPicker && settings.modelColor) {
             colorPicker.value = settings.modelColor;
+        }
+
+        const metalnessRange = document.getElementById('model-metalness-range');
+        const metalnessValue = document.getElementById('model-metalness-value');
+        if (metalnessRange && settings.modelMetalness !== undefined) {
+            metalnessRange.value = settings.modelMetalness;
+            if (metalnessValue) {
+                metalnessValue.textContent = parseFloat(settings.modelMetalness).toFixed(2);
+            }
+        }
+
+        const roughnessRange = document.getElementById('model-roughness-range');
+        const roughnessValue = document.getElementById('model-roughness-value');
+        if (roughnessRange && settings.modelRoughness !== undefined) {
+            roughnessRange.value = settings.modelRoughness;
+            if (roughnessValue) {
+                roughnessValue.textContent = parseFloat(settings.modelRoughness).toFixed(2);
+            }
         }
     },
 
@@ -176,6 +228,39 @@ export const SettingsManager = {
                 });
             }
         }
+
+        // Обновляем цвет заглушек сечения
+        if (window.ModelCut && typeof window.ModelCut.updateCapColor === 'function') {
+            window.ModelCut.updateCapColor();
+        }
+    },
+
+    applyModelMetalness(value) {
+        // Применяем металличность к модели
+        if (window.ModelViewer && window.ModelViewer.isModelLoaded()) {
+            const model = window.ModelViewer.getModel();
+            if (model) {
+                model.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        child.material.metalness = value;
+                    }
+                });
+            }
+        }
+    },
+
+    applyModelRoughness(value) {
+        // Применяем шероховатость к модели
+        if (window.ModelViewer && window.ModelViewer.isModelLoaded()) {
+            const model = window.ModelViewer.getModel();
+            if (model) {
+                model.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        child.material.roughness = value;
+                    }
+                });
+            }
+        }
     },
 };
 
@@ -186,12 +271,14 @@ if (document.readyState === 'loading') {
     SettingsManager.init();
 }
 
-// Применяем тему сразу при загрузке (до инициализации)
-(function applySavedTheme() {
+// Применяем тему и настройки модели сразу при загрузке (до инициализации)
+(function applySavedSettings() {
     const savedSettings = localStorage.getItem('uiSettings');
     if (savedSettings) {
         try {
-            const { themeMode } = JSON.parse(savedSettings);
+            const { themeMode, modelColor, modelMetalness, modelRoughness } = JSON.parse(savedSettings);
+
+            // Применяем тему
             if (themeMode) {
                 if (themeMode === 'auto') {
                     document.documentElement.removeAttribute('data-theme');
@@ -199,8 +286,38 @@ if (document.readyState === 'loading') {
                     document.documentElement.setAttribute('data-theme', themeMode);
                 }
             }
+
+            // Применяем цвет модели (после её загрузки)
+            if (modelColor && window.ModelViewer && window.ModelViewer.isModelLoaded()) {
+                const model = window.ModelViewer.getModel();
+                if (model) {
+                    model.traverse((child) => {
+                        if (child.isMesh && child.material) {
+                            child.material.color.set(modelColor);
+                        }
+                    });
+                }
+            }
+
+            // Применяем металличность и шероховатость (после загрузки модели)
+            if ((modelMetalness !== undefined || modelRoughness !== undefined) &&
+                window.ModelViewer && window.ModelViewer.isModelLoaded()) {
+                const model = window.ModelViewer.getModel();
+                if (model) {
+                    model.traverse((child) => {
+                        if (child.isMesh && child.material) {
+                            if (modelMetalness !== undefined) {
+                                child.material.metalness = modelMetalness;
+                            }
+                            if (modelRoughness !== undefined) {
+                                child.material.roughness = modelRoughness;
+                            }
+                        }
+                    });
+                }
+            }
         } catch (e) {
-            console.warn('Failed to apply saved theme:', e);
+            console.warn('Failed to apply saved settings:', e);
         }
     }
 })();
