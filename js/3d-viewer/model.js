@@ -87,19 +87,85 @@ function getMaterialSettings() {
 }
 
 /**
+ * Получает настройку отображения рёбер из localStorage
+ * @returns {boolean} true если рёбра должны быть видны
+ */
+function getEdgesEnabled() {
+    const savedSettings = localStorage.getItem('uiSettings');
+    if (savedSettings) {
+        try {
+            const { modelEdgesEnabled } = JSON.parse(savedSettings);
+            return modelEdgesEnabled !== undefined ? modelEdgesEnabled : true;
+        } catch (e) {
+            console.warn('Failed to parse edges setting from settings:', e);
+        }
+    }
+    return true;
+}
+
+/**
  * Применяет цвет ко всем мешам модели
  * @param {THREE.Object3D} object - Объект модели
  * @param {string} color - Цвет в формате hex
  */
 function applyModelColor(object, color) {
+    // Корректируем цвет ребер в зависимости от яркости цвета модели
+    const edgeColor = adjustEdgeColor(color, 0.10);
+
     object.traverse((child) => {
         if (child.isMesh && child.material) {
             const newColor = new THREE.Color(color);
+            child.material.color = newColor;
+            // Включаем dithering для устранения полосатого градиента (color banding)
+            child.material.dithering = true;
+        }
+        // Обновляем цвет ребер (светлее для темных цветов, темнее для светлых)
+        if (child.isLineSegments && child.material) {
+            const newColor = new THREE.Color(edgeColor);
             child.material.color = newColor;
         }
     });
 }
 
+/**
+ * Корректирует цвет ребер в зависимости от яркости цвета модели:
+ * - если цвет темный, делает ребра светлее на 10%
+ * - если цвет светлый, делает ребра темнее на 10%
+ * @param {string} color - Цвет в формате hex (например, "#CCCCCC")
+ * @param {number} percent - Процент коррекции (0.1 = 10%)
+ * @returns {string} Скорректированный цвет в формате hex
+ */
+function adjustEdgeColor(color, percent) {
+    const num = parseInt(color.replace('#', ''), 16);
+    const R = (num >> 16) & 0xFF;
+    const G = (num >> 8) & 0x00FF;
+    const B = num & 0x0000FF;
+
+    // Вычисляем яркость по формуле люминанса (0-255)
+    const luminance = 0.299 * R + 0.587 * G + 0.114 * B;
+
+    // Коэффициент коррекции:
+    // для темных цветов (< 128) -> factor > 1 (осветление)
+    // для светлых цветов (> 128) -> factor < 1 (затемнение)
+    // для нейтральных (= 128) -> factor = 1 (без изменений)
+    let factor;
+    if (luminance < 128) {
+        // Темный цвет: делаем светлее на percent%
+        factor = 1 + percent;
+    } else if (luminance > 128) {
+        // Светлый цвет: делаем темнее на percent%
+        factor = 1 - percent;
+    } else {
+        // Точно серый цвет (128): не меняем
+        factor = 1;
+    }
+
+    const newR = Math.max(0, Math.min(255, Math.round(R * factor)));
+    const newG = Math.max(0, Math.min(255, Math.round(G * factor)));
+    const newB = Math.max(0, Math.min(255, Math.round(B * factor)));
+
+    return '#' + (0x1000000 + newR * 0x10000 + newG * 0x100 + newB).toString(16).slice(1);
+}
 /**
  * Показывает индикатор загрузки
  */
@@ -224,23 +290,6 @@ function loadModel() {
             console.log('Model loaded successfully');
             model = gltf.scene;
 
-            // Применяем цвет если указан
-            const modelColor = getModelColor();
-            if (modelColor) {
-                applyModelColor(model, modelColor);
-                console.log('Model color applied:', modelColor);
-            }
-
-            // Применяем настройки материала (metalness, roughness)
-            const materialSettings = getMaterialSettings();
-            model.traverse((child) => {
-                if (child.isMesh && child.material) {
-                    child.material.metalness = materialSettings.metalness;
-                    child.material.roughness = materialSettings.roughness;
-                }
-            });
-            console.log('Model material settings applied:', materialSettings);
-
             // Центрирование
             const box = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
@@ -259,7 +308,41 @@ function loadModel() {
                 }
             });
 
+            // Добавляем ребра перед применением цвета
+            addEdgesToObject(model);
+
+            // Инициализируем инструмент сечений
             initCuttingTool(scene, model, renderer);
+
+            // Применяем цвет если указан (теперь и к ребрам тоже)
+            const modelColor = getModelColor();
+            if (modelColor) {
+                applyModelColor(model, modelColor);
+                console.log('Model color applied:', modelColor);
+            }
+
+            // Применяем настройки материала (metalness, roughness)
+            const materialSettings = getMaterialSettings();
+            model.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    child.material.metalness = materialSettings.metalness;
+                    child.material.roughness = materialSettings.roughness;
+                    // Включаем dithering для устранения полосатого градиента (color banding)
+                    child.material.dithering = true;
+                }
+            });
+            console.log('Model material settings applied:', materialSettings);
+
+            // Применяем видимость рёбер
+            const edgesEnabled = getEdgesEnabled();
+            if (!edgesEnabled) {
+                model.traverse((child) => {
+                    if (child.isLineSegments) {
+                        child.visible = false;
+                    }
+                });
+                console.log('Model edges visibility applied:', edgesEnabled);
+            }
 
             createAdaptiveGrid(scene);
             gridHelper = scene.getObjectByName('adaptiveGrid');

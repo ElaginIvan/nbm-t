@@ -32,6 +32,9 @@ export function setupCamera(container, canvas) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = true;
+
+    // Включаем dithering для устранения полосатого градиента (color banding)
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     
     console.log('Renderer created with localClippingEnabled:', renderer.localClippingEnabled);
 

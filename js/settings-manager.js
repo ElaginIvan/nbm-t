@@ -70,6 +70,11 @@ export const SettingsManager = {
                             <label for="model-roughness-range">Шероховатость: <span id="model-roughness-value">0.75</span></label>
                             <input type="range" id="model-roughness-range" min="0" max="1" step="0.01" value="0.75">
                         </div>
+
+                        <div class="setting-item">
+                            <label for="model-edges-toggle">Отображать рёбра</label>
+                            <input type="checkbox" id="model-edges-toggle" checked>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -150,6 +155,15 @@ export const SettingsManager = {
                 this.applyModelRoughness(value);
             });
         }
+
+        // Отображение рёбер
+        const edgesToggle = document.getElementById('model-edges-toggle');
+        if (edgesToggle) {
+            edgesToggle.addEventListener('change', (e) => {
+                this.saveSetting('modelEdgesEnabled', e.target.checked);
+                this.applyModelEdgesVisibility(e.target.checked);
+            });
+        }
     },
 
     open() {
@@ -197,6 +211,12 @@ export const SettingsManager = {
                 roughnessValue.textContent = parseFloat(settings.modelRoughness).toFixed(2);
             }
         }
+
+        // Отображение рёбер
+        const edgesToggle = document.getElementById('model-edges-toggle');
+        if (edgesToggle && settings.modelEdgesEnabled !== undefined) {
+            edgesToggle.checked = settings.modelEdgesEnabled;
+        }
     },
 
     saveSetting(key, value) {
@@ -225,6 +245,11 @@ export const SettingsManager = {
                     if (child.isMesh && child.material) {
                         child.material.color.set(color);
                     }
+                    // Обновляем цвет ребер (светлее для темных цветов, темнее для светлых)
+                    if (child.isLineSegments && child.material) {
+                        const edgeColor = this.adjustEdgeColor(color, 0.10);
+                        child.material.color.set(edgeColor);
+                    }
                 });
             }
         }
@@ -235,6 +260,33 @@ export const SettingsManager = {
         }
     },
 
+    /**
+     * Корректирует цвет ребер в зависимости от яркости цвета модели:
+     * - если цвет темный, делает ребра светлее на 10%
+     * - если цвет светлый, делает ребра темнее на 10%
+     * @param {string} color - Цвет в формате hex (например, "#CCCCCC")
+     * @param {number} percent - Процент коррекции (0.1 = 10%)
+     * @returns {string} Скорректированный цвет в формате hex
+     */
+    adjustEdgeColor(color, percent) {
+        const num = parseInt(color.replace('#', ''), 16);
+        const R = (num >> 16) & 0xFF;
+        const G = (num >> 8) & 0x00FF;
+        const B = num & 0x0000FF;
+        
+        // Вычисляем яркость по формуле люминанса
+        const luminance = 0.299 * R + 0.587 * G + 0.114 * B;
+        
+        // Если цвет темный (яркость < 128), осветляем, иначе затемняем
+        const amt = Math.round(255 * percent * (luminance < 128 ? 1 : -1));
+        
+        const newR = Math.max(0, Math.min(255, R + amt));
+        const newG = Math.max(0, Math.min(255, G + amt));
+        const newB = Math.max(0, Math.min(255, B + amt));
+        
+        return '#' + (0x1000000 + newR * 0x10000 + newG * 0x100 + newB).toString(16).slice(1);
+    },
+
     applyModelMetalness(value) {
         // Применяем металличность к модели
         if (window.ModelViewer && window.ModelViewer.isModelLoaded()) {
@@ -243,6 +295,7 @@ export const SettingsManager = {
                 model.traverse((child) => {
                     if (child.isMesh && child.material) {
                         child.material.metalness = value;
+                        child.material.dithering = true;
                     }
                 });
             }
@@ -257,6 +310,21 @@ export const SettingsManager = {
                 model.traverse((child) => {
                     if (child.isMesh && child.material) {
                         child.material.roughness = value;
+                        child.material.dithering = true;
+                    }
+                });
+            }
+        }
+    },
+
+    applyModelEdgesVisibility(enabled) {
+        // Применяем видимость рёбер к модели
+        if (window.ModelViewer && window.ModelViewer.isModelLoaded()) {
+            const model = window.ModelViewer.getModel();
+            if (model) {
+                model.traverse((child) => {
+                    if (child.isLineSegments) {
+                        child.visible = enabled;
                     }
                 });
             }
@@ -276,7 +344,7 @@ if (document.readyState === 'loading') {
     const savedSettings = localStorage.getItem('uiSettings');
     if (savedSettings) {
         try {
-            const { themeMode, modelColor, modelMetalness, modelRoughness } = JSON.parse(savedSettings);
+            const { themeMode, modelColor, modelMetalness, modelRoughness, modelEdgesEnabled } = JSON.parse(savedSettings);
 
             // Применяем тему
             if (themeMode) {
@@ -294,6 +362,7 @@ if (document.readyState === 'loading') {
                     model.traverse((child) => {
                         if (child.isMesh && child.material) {
                             child.material.color.set(modelColor);
+                            child.material.dithering = true;
                         }
                     });
                 }
@@ -312,6 +381,20 @@ if (document.readyState === 'loading') {
                             if (modelRoughness !== undefined) {
                                 child.material.roughness = modelRoughness;
                             }
+                            child.material.dithering = true;
+                        }
+                    });
+                }
+            }
+
+            // Применяем видимость рёбер (после загрузки модели)
+            if (modelEdgesEnabled !== undefined &&
+                window.ModelViewer && window.ModelViewer.isModelLoaded()) {
+                const model = window.ModelViewer.getModel();
+                if (model) {
+                    model.traverse((child) => {
+                        if (child.isLineSegments) {
+                            child.visible = modelEdgesEnabled;
                         }
                     });
                 }

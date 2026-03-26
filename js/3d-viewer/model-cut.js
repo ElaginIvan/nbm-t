@@ -174,7 +174,8 @@ function createCapPlane(plane, renderOrder, otherPlanes) {
         stencilFail: THREE.ReplaceStencilOp,
         stencilZFail: THREE.ReplaceStencilOp,
         stencilZPass: THREE.ReplaceStencilOp,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
+        dithering: true
     });
 
     const geometry = new THREE.PlaneGeometry(capOptions.planeSize, capOptions.planeSize);
@@ -256,6 +257,7 @@ export function enableCutting() {
             newMaterial.clippingPlanes = [];
             newMaterial.clipShadows = true;
             newMaterial.shadowSide = THREE.DoubleSide;
+            newMaterial.dithering = true;
             return newMaterial;
         };
 

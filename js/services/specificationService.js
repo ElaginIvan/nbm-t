@@ -287,6 +287,9 @@ export const SpecificationService = {
                                 child.material.emissive.setHex(0x000000);
                             }
 
+                            // Включаем dithering для устранения полосатого градиента
+                            child.material.dithering = true;
+
                             // Показываем все
                             child.visible = true;
                         }
