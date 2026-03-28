@@ -170,13 +170,13 @@ export const DrawingLoader = {
         const maxSheets = 10;
 
         // Базовый чертеж без листа
-        const basePath = `models/${projectId}/png/${designation}.png`;
+        const basePath = `models/${projectId}/avif/${designation}.avif`;
         try {
             const response = await fetch(basePath, { method: 'HEAD' });
             if (response.ok) {
                 drawings.push({
                     path: basePath,
-                    name: `${designation}.png`,
+                    name: `${designation}.avif`,
                     sheetNumber: 1,
                     isBase: true
                 });
@@ -188,14 +188,14 @@ export const DrawingLoader = {
         // Чертежи с листами (с пробелом)
         sheetNumber = 1;
         while (sheetNumber <= maxSheets) {
-            const pathWithSheet = `models/${projectId}/png/${designation} Лист-${sheetNumber}.png`;
+            const pathWithSheet = `models/${projectId}/avif/${designation} Лист-${sheetNumber}.avif`;
 
             try {
                 const response = await fetch(pathWithSheet, { method: 'HEAD' });
                 if (response.ok && response.status === 200) {
                     drawings.push({
                         path: pathWithSheet,
-                        name: `${designation} Лист-${sheetNumber}.png`,
+                        name: `${designation} Лист-${sheetNumber}.avif`,
                         sheetNumber: sheetNumber,
                         isBase: false
                     });
@@ -214,14 +214,14 @@ export const DrawingLoader = {
         if (drawings.length === 0) {
             sheetNumber = 1;
             while (sheetNumber <= maxSheets) {
-                const pathNoSpace = `models/${projectId}/png/${designation}Лист-${sheetNumber}.png`;
+                const pathNoSpace = `models/${projectId}/avif/${designation}Лист-${sheetNumber}.avif`;
 
                 try {
                     const response = await fetch(pathNoSpace, { method: 'HEAD' });
                     if (response.ok && response.status === 200) {
                         drawings.push({
                             path: pathNoSpace,
-                            name: `${designation}Лист-${sheetNumber}.png`,
+                            name: `${designation}Лист-${sheetNumber}.avif`,
                             sheetNumber: sheetNumber,
                             isBase: false
                         });
@@ -236,7 +236,7 @@ export const DrawingLoader = {
         }
 
         console.log(`🔎 Найдено чертежей для "${designation}": ${drawings.length}`);
-        
+
         return drawings.sort((a, b) => {
             if (a.isBase && !b.isBase) return -1;
             if (!a.isBase && b.isBase) return 1;
