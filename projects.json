@@ -31,6 +31,14 @@
             "previewImage": "models/tbo-8-k/preview.png",
             "modelFile": "models/tbo-8-k/model.glb",
             "cpecFile": "models/tbo-8-k/cpec.csv"
+        },
+        {
+            "id": "fo-2",
+            "name": "Форма ФО-2",
+            "description": "Форма для изготовления фундамента опоры из бетона.",
+            "previewImage": "models/fo-2/preview.png",
+            "modelFile": "models/fo-2/model.glb",
+            "cpecFile": "models/fo-2/cpec.csv"
         }
     ]
 }
