@@ -39,6 +39,14 @@
             "previewImage": "models/fo-2/preview.png",
             "modelFile": "models/fo-2/model.glb",
             "cpecFile": "models/fo-2/cpec.csv"
+        },
+        {
+            "id": "roof-70",
+            "name": "Крыша L=70",
+            "description": "Крыша длиной 70 метров.",
+            "previewImage": "models/roof-70/preview.png",
+            "modelFile": "models/roof-70/model.glb",
+            "cpecFile": "models/roof-70/cpec.csv"
         }
     ]
 }
