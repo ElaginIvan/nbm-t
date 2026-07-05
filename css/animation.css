@@ -1,0 +1,115 @@
+/* ==========================================================
+   Плагин: Анимация (animation.js)
+   Использует базовые классы .plugin-pill* из components.css.
+   Здесь только специфичные для анимации модификаторы.
+   ========================================================== */
+
+/* Панель — расширяет .plugin-pill (класс добавляется через className в регистрации) */
+.animation-panel {
+    /* стили наследуются от .plugin-pill */
+}
+
+/* Кнопки — расширяют .plugin-pill-btn */
+.anim-btn {
+    /* стили наследуются от .plugin-pill-btn */
+}
+
+/* Кнопка play — состояние воспроизведения */
+.anim-btn.playing {
+    background: rgba(34, 160, 70, 0.3);
+    border-color: rgba(34, 160, 70, 0.6);
+    box-shadow: 0 2px 8px rgba(34, 160, 70, 0.25);
+}
+.anim-btn.playing svg {
+    fill: #22a046;
+}
+
+/* Навигация — полоса с доп. контролами */
+.anim-extra {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px;
+}
+
+/* Селектор анимации */
+.anim-selector {
+    background: rgba(0, 0, 0, 0.15);
+    color: var(--text-color);
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    border-radius: 20px;
+    padding: 4px 24px 4px 10px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    outline: none;
+    min-width: 90px;
+    height: 32px;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23666' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    transition: var(--transition);
+}
+
+.anim-selector:hover {
+    border-color: rgba(128, 128, 128, 0.4);
+}
+
+.anim-selector option {
+    background: var(--card-background);
+    color: var(--text-color);
+}
+
+/* Группа скорости */
+.anim-speed-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.anim-speed-slider {
+    width: 60px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(128, 128, 128, 0.25);
+    border-radius: 10px;
+    outline: none;
+    cursor: pointer;
+}
+
+.anim-speed-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(128, 128, 128, 0.3);
+    transition: all 0.1s;
+}
+
+.anim-speed-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+    background: #f0f0f0;
+}
+
+.anim-speed-value {
+    font-size: 0.7rem;
+    color: var(--text-color);
+    opacity: 0.7;
+    min-width: 32px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Сообщение «нет анимаций» */
+.anim-empty-hint {
+    color: var(--text-color);
+    opacity: 0.5;
+    font-size: 0.75rem;
+    padding: 6px 12px;
+    white-space: nowrap;
+}

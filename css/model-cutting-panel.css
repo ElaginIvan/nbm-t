@@ -1,119 +1,17 @@
 /* ====================== ПАНЕЛЬ СЕЧЕНИЯ ====================== */
-.cutting-panel-wrapper {
-    position: absolute;
-    bottom: 20px;
-    right: 20px;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    pointer-events: none;
-}
+/*
+ * Корневой контейнер .cutting-panel использует базовые классы
+ * .plugin-pill / .plugin-pill-group / .plugin-pill-btn из components.css.
+ * Здесь — только специфичные для сечения стили: цвета осей, слайдер, инверсия.
+ */
 
-/* Кнопка включения (всегда на одном месте) */
-.cutting-toggle {
-    background: var(--button-color);
-    box-shadow: 0 0px 10px rgba(0, 0, 0, 0.3);
-    transition: var(--transition);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    pointer-events: auto;
-    cursor: pointer;
-    z-index: 2;
-    
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-}
-
-.cutting-toggle svg {
-    fill: var(--text-color);
-    height: 21px;
-    width: 21px;
-    rotate: 90deg;
-}
-
-.cutting-toggle:hover {
-    background: var(--button-color);
-    border-color: rgba(255, 255, 255, 0.3);
-    transform: scale(1.05);
-}
-
-.cutting-toggle.active {
-    background: rgba(255, 68, 68, 0.3);
-    border-color: rgba(255, 68, 68, 0.5);
-    color: #ff8888;
-}
-
-/* Панель с элементами управления (выезжает слева от кнопки) */
-.cutting-panel {
-    position: absolute;
-    right: 58px;
-    /* Расстояние от кнопки (48px + отступ) */
-    background: var(--button-color);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: 48px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    display: flex;
-    gap: 4px;
-    align-items: center;
-    pointer-events: auto;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    opacity: 0;
-    transform: translateX(20px);
-    visibility: hidden;
-    z-index: 1;
-}
-
-/* Развернутое состояние панели */
-.cutting-panel.expanded {
-    opacity: 1;
-    transform: translateX(0);
-    visibility: visible;
-}
-
-/* Кнопки осей */
-.cutting-axes {
-    display: flex;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 2px;
-    gap: 2px;
-    border-radius: 40px;
-}
-
+/* Кнопки осей — наследуют .plugin-pill-btn */
 .cutting-axis-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: none;
-    background: transparent;
-    color: var(--text-color);
     font-weight: 500;
     font-size: 15px;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid transparent;
 }
 
-.cutting-axis-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.cutting-axis-btn.active {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.3);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-/* Цвета кнопок */
+/* Цвета кнопок осей */
 .cutting-axis-btn.axis-x {
     color: #ff4444;
 }
@@ -141,9 +39,6 @@
     background: linear-gradient(to right, rgba(76, 175, 80, 0.8), rgba(255, 68, 68, 0.8));
     border-radius: 10px;
     outline: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .cutting-slider::-webkit-slider-thumb {
@@ -178,30 +73,10 @@
     transform: none;
 }
 
-/* Кнопки действий */
-.cutting-actions {
-    display: flex;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 40px;
-    padding: 2px;
-    gap: 2px;
-}
-
+/* Кнопки действий — наследуют .plugin-pill-btn */
 .cutting-invert-btn,
 .cutting-reset-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: none;
-    background: transparent;
-    color: var(--text-color);
-    cursor: pointer;
-    transition: all 0.2s;
     font-size: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid transparent;
 }
 
 .cutting-invert-btn svg,
@@ -211,45 +86,14 @@
     width: 21px;
 }
 
-
 .cutting-invert-btn.active {
     background: rgba(76, 175, 80, 0.25);
     color: var(--text-color);
     border-color: rgba(76, 175, 80, 0.4);
 }
 
-.cutting-invert-btn:disabled,
-.cutting-reset-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-}
-
 /* Адаптивность для мобильных */
 @media (max-width: 768px) {
-    .cutting-panel-wrapper {
-        bottom: 15px;
-        right: 15px;
-    }
-
-    .fullscreen-active .cutting-panel-wrapper {
-        bottom: 80px;
-    }
-
-    .cutting-toggle {
-        width: 44px;
-        height: 44px;
-    }
-
-    .cutting-toggle svg {
-        width: 21px;
-        height: 21px;
-    }
-
-    .cutting-panel {
-        right: 52px;
-        /* 44px + отступ */
-    }
-
     .cutting-axis-btn,
     .cutting-invert-btn,
     .cutting-reset-btn {

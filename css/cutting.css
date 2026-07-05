@@ -3,52 +3,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-}
-
-.cutting-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
-    flex: 1;
-}
-
-.cutting-section {
-    background-color: #f8f9fa;
-    padding: 15px;
-    border-radius: 5px;
-    border: 1px solid #dee2e6;
-}
-
-.cutting-section h4 {
-    margin-top: 0;
-    color: #495057;
-    border-bottom: 2px solid #00ff00;
-    padding-bottom: 8px;
-}
-
-.cutting-list {
-    list-style-type: none;
-    padding: 0;
-}
-
-.cutting-list li {
-    padding: 8px 0;
-    border-bottom: 1px solid #e9ecef;
-}
-
-.cutting-list li:last-child {
-    border-bottom: none;
-}
-
-/* Стили для вкладки раскроя */
-.cutting-tab {
-    overflow-y: auto;
-}
-
-.cutting-full {
     padding: 10px;
-    display: flex;
-    flex-direction: column;
     gap: 20px;
 }
 
@@ -62,7 +17,7 @@
 
 .cutting-controls h2 {
     margin-top: 0;
-    color: #007bff;
+    color: var(--primary-color);
     text-align: center;
     margin-bottom: 20px;
     font-size: 1.5rem;
@@ -71,9 +26,8 @@
 .controls-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    /* Равные колонки */
+    /* Базовый gap между колонками */
     gap: 15px;
-    /* Уменьшенный gap для мобильных */
     margin-bottom: 20px;
     align-items: end;
     /* Выравнивание по нижнему краю */
@@ -103,10 +57,11 @@
 .control-group input,
 .control-group select {
     padding: 10px 12px;
-    border: 1px solid #ced4da;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     font-size: 14px;
-    background-color: white;
+    background-color: var(--card-background);
+    color: var(--text-color);
     width: 100%;
     box-sizing: border-box;
     /* Учитываем padding в ширине */
@@ -118,23 +73,22 @@
 
 .control-group input:focus,
 .control-group select:focus {
-    border-color: #007bff;
+    border-color: var(--primary-color);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(0, 123, 255, .25);
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.25);
 }
 
 /* Для выпадающего списка */
 .control-group select {
     cursor: pointer;
     appearance: none;
+    -webkit-appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23333' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 8px center;
-    /* Уменьшен отступ для мобильных */
+    /* Отступ под стрелку выпадающего списка */
     background-size: 12px;
-    /* Уменьшен размер иконки */
     padding-right: 30px;
-    /* Уменьшен padding для мобильных */
 }
 
 /* Для числового поля */
@@ -150,11 +104,10 @@
 }
 
 .cut-btn {
-    background-color: #007bff;
+    background-color: var(--primary-color);
     color: white;
     border: none;
     padding: 12px 20px;
-    /* Уменьшен padding для мобильных */
     border-radius: 4px;
     font-size: 16px;
     font-weight: 500;
@@ -165,11 +118,11 @@
     margin: 0 auto;
     display: block;
     height: 44px;
-    /* Сходная высота с полями ввода */
+    /* Схожая высота с полями ввода */
 }
 
 .cut-btn:hover {
-    background-color: #0056b3;
+    background-color: #3578d4;
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
@@ -215,12 +168,12 @@
     margin-top: 0;
     margin-bottom: 10px;
     font-size: 14px;
-    color: #6c757d;
+    color: var(--text-secondary);
     font-weight: 500;
 }
 
 .material-summary h4,
-p {
+.material-summary p {
     margin-bottom: 4px;
 }
 
@@ -235,10 +188,10 @@ p {
     width: 100%;
     height: 40px;
     display: flex;
-    border: 2px solid #343a40;
+    border: 2px solid var(--secondary-color);
     border-radius: 4px;
     overflow: hidden;
-    background-color: #e9ecef;
+    background-color: var(--border-color);
 }
 
 .part {
@@ -262,7 +215,7 @@ p {
 
 .cut-visual {
     height: 100%;
-    background-color: #343a40;
+    background-color: var(--secondary-color);
     min-width: 2px;
 }
 
@@ -279,7 +232,7 @@ p {
 
 .waste-label {
     font-size: 12px;
-    color: #6c757d;
+    color: var(--text-secondary);
     text-align: right;
     margin-top: 0;
     margin-bottom: 0;
@@ -293,7 +246,7 @@ p {
     border-radius: 6px;
     padding: 10px;
     margin-top: 10px;
-    
+
 }
 
 .summary h3,
@@ -308,7 +261,6 @@ p {
 .summary p {
     margin: 4px 0;
     font-size: 14px;
-    align-items: normal;
 }
 
 .summary strong {
@@ -317,6 +269,13 @@ p {
 
 
 /* Информационный заголовок */
+.empty-state h3,
+.empty-state p {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
 .empty-state svg {
     display: flex;
     height: 50px;

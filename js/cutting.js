@@ -1,18 +1,165 @@
 /**
- * Cutting Calculator Module
- * Отвечает за раскрой материалов с использованием данных из спецификации
+ * Cutting Module
+ * Раскрой материалов
+ *
+ * Содержит:
+ * - CuttingService (загрузка данных, выполнение раскроя)
+ * - CuttingCalculator (UI: кнопка, визуализация результатов)
  */
 
-import { CuttingService, getProjectId } from './services/cuttingService.js';
-import { store } from './store.js';
+import { store, escapeHtml, getProjectId, decodeCSV, parseCSV } from './app.js';
+import { SpecificationService } from './specification.js';
 
 // ============================================================
-// Визуализация результатов
+// CUTTING SERVICE
 // ============================================================
 
-/**
- * Визуализирует результаты раскроя с использованием DocumentFragment
- */
+function parseMaterialString(materialString) {
+    if (!materialString) return null;
+    const match = materialString.match(/^(.*?)\s*L\s*=\s*(\d+\.?\d*)\s*$/i);
+    if (match) return { type: match[1].trim(), length: parseFloat(match[2]) };
+    return { type: materialString.trim(), length: null };
+}
+
+function groupMaterialsByType(csvData, modelStructure) {
+    const materialsMap = new Map();
+    const quantityMap = new Map();
+    modelStructure.forEach(item => {
+        if (!item.name) return;
+        const cleanItemName = item.name.trim();
+        const quantity = item.instanceCount || 1;
+        quantityMap.set(cleanItemName, quantity);
+        const parts = cleanItemName.split(/[-_.]/);
+        if (parts.length > 1) {
+            const baseName = parts[0] + '.' + parts[1];
+            if (baseName !== cleanItemName) {
+                quantityMap.set(baseName, (quantityMap.get(baseName) || 0) + quantity);
+            }
+        }
+        const match = cleanItemName.match(/^([A-ZА-ЯЁ]+-\d+\.\d+)/);
+        if (match && match[1] !== cleanItemName) {
+            quantityMap.set(match[1], (quantityMap.get(match[1]) || 0) + quantity);
+        }
+    });
+    csvData.forEach((row) => {
+        const designation = row['Обозначение'];
+        const material = row['Описание'];
+        if (!designation || !material) return;
+        const parsedMaterial = parseMaterialString(material);
+        if (!parsedMaterial || !parsedMaterial.type || parsedMaterial.length === null) return;
+        let quantity = 1;
+        const parts = designation.split('-');
+        const baseKey = parts.length >= 2 && parts[1]
+            ? parts[0] + '.' + parts[1].split('.')[0]
+            : null;
+        const searchKeys = [
+            designation,
+            designation.replace(/-\d+$/, ''),
+            designation.match(/^([A-ZА-ЯЁ]+-\d+\.\d+)/)?.[1],
+            baseKey
+        ].filter(Boolean);
+        for (const key of searchKeys) {
+            if (quantityMap.has(key)) { quantity = quantityMap.get(key); break; }
+        }
+        if (quantity === 1) {
+            const csvQuantity = parseInt(row['КОЛ.']) || parseInt(row['Кол.']) || parseInt(row['Количество']) || 1;
+            quantity = csvQuantity;
+        }
+        if (quantity <= 0) return;
+        const key = parsedMaterial.type;
+        const length = parsedMaterial.length;
+        if (!materialsMap.has(key)) materialsMap.set(key, []);
+        for (let i = 0; i < quantity; i++) materialsMap.get(key).push({ length });
+    });
+    const result = {};
+    materialsMap.forEach((parts, materialType) => {
+        const groupedParts = {};
+        parts.forEach(part => {
+            const lengthKey = part.length.toString();
+            if (!groupedParts[lengthKey]) groupedParts[lengthKey] = { length: part.length, quantity: 0 };
+            groupedParts[lengthKey].quantity++;
+        });
+        result[materialType] = Object.values(groupedParts);
+    });
+    return result;
+}
+
+export const CuttingService = {
+    async loadCuttingData() {
+        try {
+            store.setState('cutting.isLoading', true);
+            const projectId = getProjectId();
+            if (!projectId) return {};
+            const csvPath = `models/${projectId}/spec.csv`;
+            const response = await fetch(csvPath);
+            if (!response.ok) return {};
+            const buffer = await response.arrayBuffer();
+            const csvText = decodeCSV(buffer);
+            const csvData = parseCSV(csvText);
+            const modelStructure = store.getState('specification.structure') || [];
+            const materialsData = groupMaterialsByType(csvData, modelStructure);
+            store.setState('cutting.materialsData', materialsData);
+            return materialsData;
+        } catch (error) {
+            console.error('Error loading cutting data:', error);
+            return {};
+        } finally {
+            store.setState('cutting.isLoading', false);
+        }
+    },
+
+    async performCutting(options = {}) {
+        const { stockLength = 6000, kerf = 0, multiplicity = 1 } = options;
+        let materialsData = store.getState('cutting.materialsData');
+        if (Object.keys(materialsData).length === 0) materialsData = await this.loadCuttingData();
+        if (Object.keys(materialsData).length === 0) return new Map();
+        const allResults = new Map();
+        for (const [materialName, parts] of Object.entries(materialsData)) {
+            const partsToCut = [];
+            for (const item of parts) {
+                if (item.length > stockLength) continue;
+                const totalQuantity = item.quantity * multiplicity;
+                for (let i = 0; i < totalQuantity; i++) partsToCut.push({ length: item.length });
+            }
+            if (partsToCut.length === 0) continue;
+            partsToCut.sort((a, b) => b.length - a.length);
+            const cuttingPlan = [];
+            for (const part of partsToCut) {
+                let placed = false;
+                for (const stock of cuttingPlan) {
+                    const stockCount = stock.length;
+                    const usedLength = stockCount > 0
+                        ? stock.reduce((sum, p) => sum + p.length, 0) + (stockCount - 1) * kerf
+                        : 0;
+                    if (stockLength - usedLength >= part.length + (stockCount > 0 ? kerf : 0)) {
+                        stock.push(part);
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed) cuttingPlan.push([part]);
+            }
+            const groupedPlan = new Map();
+            for (const stock of cuttingPlan) {
+                const key = stock.map(p => p.length).sort((a, b) => a - b).join(',');
+                if (groupedPlan.has(key)) groupedPlan.get(key).count++;
+                else groupedPlan.set(key, { parts: stock, count: 1 });
+            }
+            allResults.set(materialName, { plan: groupedPlan });
+        }
+        store.setState('cutting.results', allResults);
+        return allResults;
+    },
+
+    getSettings() { return store.getState('cutting.settings'); },
+    updateSetting(key, value) { store.setState('cutting.settings', { ...store.getState('cutting.settings'), [key]: value }); },
+    clear() { store.setState('cutting.materialsData', {}); store.setState('cutting.results', null); store.setState('cutting.isLoading', false); }
+};
+
+// ============================================================
+// CUTTING CALCULATOR — UI
+// ============================================================
+
 function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
     const resultsContainer = document.getElementById('results-container');
     const summaryContainer = document.getElementById('summary-container');
@@ -23,7 +170,9 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
     if (allResults.size === 0) {
         resultsContainer.innerHTML = `
             <div class="empty-state">
-                <i class="fas fa-cut"></i>
+                <svg class="icon" aria-hidden="true">
+                    <use xlink:href="assets/icons/sprite.svg#cut"></use>
+                </svg>
                 <h3>Нет деталей для раскроя</h3>
                 <p>Проверьте данные в спецификации</p>
             </div>
@@ -35,8 +184,7 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
     let grandTotalStocks = 0;
     let grandTotalParts = 0;
 
-    // Создаем сводку
-    const summaryHTML = `
+    summaryContainer.innerHTML = `
         <div class="summary-header">
             <h3>Сводка раскроя</h3>
             <div class="summary-info">
@@ -46,14 +194,10 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
             </div>
         </div>
     `;
-
-    summaryContainer.innerHTML = summaryHTML;
     summaryContainer.style.display = 'block';
 
-    // Используем DocumentFragment для производительности
     const fragment = document.createDocumentFragment();
 
-    // Обрабатываем каждый материал
     for (const [materialName, data] of allResults.entries()) {
         const materialSection = document.createElement('section');
         materialSection.className = 'material-section';
@@ -66,8 +210,7 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
         let materialTotalStocks = 0;
         let materialTotalParts = 0;
 
-        data.plan.forEach((groupData) => {
-            const { parts, count } = groupData;
+        data.plan.forEach(({ parts, count }) => {
             materialTotalStocks += count;
             materialTotalParts += parts.length * count;
 
@@ -83,10 +226,8 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
             const stockVisual = document.createElement('div');
             stockVisual.className = 'stock';
 
-            // Группируем одинаковые детали
             const groupedParts = [];
             let currentGroup = null;
-
             for (const part of parts) {
                 if (currentGroup && currentGroup.length === part.length) {
                     currentGroup.count++;
@@ -97,21 +238,14 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
             }
             if (currentGroup) groupedParts.push(currentGroup);
 
-            // Расчет использованной длины
             let usedLengthWithKerf = 0;
             let totalNumberOfParts = 0;
-
             groupedParts.forEach(group => {
                 usedLengthWithKerf += group.length * group.count;
                 totalNumberOfParts += group.count;
             });
-
-            // Добавляем резы
             usedLengthWithKerf += totalNumberOfParts * kerf;
 
-            const numberOfGroups = groupedParts.length;
-
-            // Визуализация деталей
             groupedParts.forEach((group, groupIndex) => {
                 const groupTotalLength = group.length * group.count;
                 const groupCutsLength = group.count * kerf;
@@ -123,8 +257,7 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
                 partElement.textContent = group.count > 1 ? `${group.length}×${group.count}` : `${group.length}`;
                 stockVisual.appendChild(partElement);
 
-                // Визуализация реза между группами
-                if (groupIndex < numberOfGroups - 1) {
+                if (groupIndex < groupedParts.length - 1) {
                     const cutElement = document.createElement('div');
                     cutElement.className = 'cut-visual';
                     cutElement.style.width = `${(kerf / stockLength) * 100}%`;
@@ -132,7 +265,6 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
                 }
             });
 
-            // Остаток (отход)
             const waste = stockLength - usedLengthWithKerf;
             materialTotalWaste += waste * count;
 
@@ -145,17 +277,16 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
             }
 
             stockWrapper.appendChild(stockVisual);
-            stockElement.appendChild(stockWrapper);
 
             const wasteLabel = document.createElement('p');
             wasteLabel.className = 'waste-label';
             wasteLabel.textContent = `Остаток: ${Math.round(waste)} мм`;
             stockWrapper.appendChild(wasteLabel);
 
+            stockElement.appendChild(stockWrapper);
             materialSection.appendChild(stockElement);
         });
 
-        // Сводка по материала
         const materialSummary = document.createElement('div');
         materialSummary.className = 'material-summary';
         materialSummary.innerHTML = `
@@ -168,20 +299,15 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
             </div>
         `;
         materialSection.appendChild(materialSummary);
-        
-        // Добавляем во фрагмент вместо прямого добавления в DOM
         fragment.appendChild(materialSection);
 
-        // Общая статистика
         grandTotalWaste += materialTotalWaste;
         grandTotalStocks += materialTotalStocks;
         grandTotalParts += materialTotalParts;
     }
 
-    // Добавляем всё содержимое фрагмента в DOM одним разом
     resultsContainer.appendChild(fragment);
 
-    // Общая сводка
     const totalSummary = document.createElement('div');
     totalSummary.className = 'total-summary';
     totalSummary.innerHTML = `
@@ -194,69 +320,49 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
         </div>
     `;
     summaryContainer.appendChild(totalSummary);
-
-    // Прокручиваем к результатам
     resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// ============================================================
-// Инициализация
-// ============================================================
-
-/**
- * Инициализация калькулятора раскроя
- */
-async function initializeCuttingCalculator() {
+export async function initializeCuttingCalculator() {
     const cutButton = document.getElementById('cutButton');
     const resultsContainer = document.getElementById('results-container');
     const summaryContainer = document.getElementById('summary-container');
 
-    if (!cutButton) {
-        console.error('Cut button not found');
-        return;
-    }
+    if (!cutButton) return;
 
-    // Функция для выполнения раскроя
     const performCutting = async () => {
-        const stockLengthSelect = document.getElementById('stockLengthSelect');
-        const kerfSelect = document.getElementById('kerfSelect');
-        const multiplicityInput = document.getElementById('multiplicity');
-
-        const stockLength = parseInt(stockLengthSelect.value);
-        const kerf = parseFloat(kerfSelect.value);
-        const multiplicity = parseInt(multiplicityInput.value);
+        const stockLength = parseInt(document.getElementById('stockLengthSelect').value);
+        const kerf = parseFloat(document.getElementById('kerfSelect').value);
+        const multiplicity = parseInt(document.getElementById('multiplicity').value);
 
         if (isNaN(multiplicity) || multiplicity < 1) {
             alert('Пожалуйста, введите корректное значение кратности (целое число > 0).');
             return;
         }
 
-        // Сохраняем настройки в store
         store.setState('cutting.settings.stockLength', stockLength);
         store.setState('cutting.settings.kerf', kerf);
         store.setState('cutting.settings.multiplicity', multiplicity);
 
-        // Показываем индикатор загрузки
         resultsContainer.innerHTML = `
             <div class="empty-state">
-                <i class="fas fa-spinner fa-spin"></i>
+                <svg class="icon icon--spin" aria-hidden="true">
+                    <use xlink:href="assets/icons/sprite.svg#spinner"></use>
+                </svg>
                 <h3>Загрузка данных...</h3>
                 <p>Пожалуйста, подождите</p>
             </div>
         `;
 
-        // Выполняем раскрой через сервис
         try {
-            const results = await CuttingService.performCutting({
-                stockLength,
-                kerf,
-                multiplicity
-            });
+            const results = await CuttingService.performCutting({ stockLength, kerf, multiplicity });
 
             if (results.size === 0) {
                 resultsContainer.innerHTML = `
                     <div class="empty-state">
-                        <i class="fas fa-exclamation-triangle"></i>
+                    <svg class="icon icon--warning" aria-hidden="true">
+                        <use xlink:href="assets/icons/sprite.svg#triangle-exclamation"></use>
+                    </svg>
                         <h3>Нет данных для раскроя</h3>
                         <p>Убедитесь, что файл spec.csv содержит данные о материалах в столбце "Описание"</p>
                         <p>Формат материала: "Труба 40х60х2 L=400" или "Лист 1500х2000х4"</p>
@@ -270,93 +376,77 @@ async function initializeCuttingCalculator() {
             console.error('Error during cutting:', error);
             resultsContainer.innerHTML = `
                 <div class="empty-state">
-                    <i class="fas fa-exclamation-triangle"></i>
+                    <svg class="icon icon--warning" aria-hidden="true">
+                        <use xlink:href="assets/icons/sprite.svg#triangle-exclamation"></use>
+                    </svg>
                     <h3>Ошибка при раскрое</h3>
-                    <p>${error.message}</p>
+                    <p>${escapeHtml(error.message)}</p>
                 </div>
             `;
         }
     };
 
-    // Назначаем обработчик
     cutButton.addEventListener('click', performCutting);
 
-    // Показываем начальное состояние
     resultsContainer.innerHTML = `
         <div class="empty-state">
-            <svg>
-                <use xlink:href="assets/icons/sprite.svg#cut">
-            </use></svg>
+            <svg class="icon" aria-hidden="true">
+                <use xlink:href="assets/icons/sprite.svg#cut"></use>
+            </svg>
             <h3 class="info-start">Готов к работе</h3>
             <p class="info-start">Настройте параметры и нажмите "Раскроить"</p>
         </div>
     `;
 }
 
-/**
- * Ожидание инициализации проекта
- */
-function waitForProjectInitialization() {
+export function waitForProjectInitialization() {
     let checkCount = 0;
     const maxChecks = 30;
 
     const checkInterval = setInterval(() => {
         checkCount++;
-
         const projectId = getProjectId();
 
         if (projectId) {
             clearInterval(checkInterval);
-            console.log('Project initialized, ID:', projectId);
-
-            initializeCuttingCalculator().then(() => {
-                console.log('Cutting calculator initialized');
-            }).catch(error => {
-                console.error('Error initializing cutting calculator:', error);
+            initializeCuttingCalculator().catch(error => {
+                showCuttingInitError(error);
             });
         } else if (checkCount >= maxChecks) {
             clearInterval(checkInterval);
-            console.warn('Project initialization timeout');
-
             const resultsContainer = document.getElementById('results-container');
             if (resultsContainer) {
                 resultsContainer.innerHTML = `
                     <div class="empty-state">
-                        <i class="fas fa-exclamation-triangle"></i>
+                    <svg class="icon icon--warning" aria-hidden="true">
+                        <use xlink:href="assets/icons/sprite.svg#triangle-exclamation"></use>
+                    </svg>
                         <h3>Не удалось определить проект</h3>
                         <p>Пожалуйста, перезагрузите страницу или вернитесь на главную страницу</p>
-                        <a href="index.html" class="cut-btn" style="margin-top: 20px; display: inline-block;">
-                            Вернуться на главную
-                        </a>
+                        <a href="index.html" class="cut-btn" style="margin-top: 20px; display: inline-block;">Вернуться на главную</a>
                     </div>
                 `;
             }
-        } else {
-            console.log(`Waiting for project initialization... (${checkCount}/${maxChecks})`);
         }
     }, 500);
 }
 
 /**
- * Инициализация страницы раскроя
+ * Показывает сообщение об ошибке инициализации в контейнере результатов.
+ * Вызывается, если initializeCuttingCalculator упал с исключением.
  */
-function initCuttingPage() {
-    console.log('Initializing cutting page...');
-    waitForProjectInitialization();
+function showCuttingInitError(error) {
+    console.error('Error initializing cutting calculator:', error);
+    const resultsContainer = document.getElementById('results-container');
+    if (!resultsContainer) return;
+    resultsContainer.innerHTML = `
+        <div class="empty-state">
+            <svg class="icon icon--warning" aria-hidden="true">
+                <use xlink:href="assets/icons/sprite.svg#triangle-exclamation"></use>
+            </svg>
+            <h3>Не удалось инициализировать раскрой</h3>
+            <p>${escapeHtml(error?.message || String(error))}</p>
+            <p style="font-size: 0.85rem; opacity: 0.7;">Пожалуйста, перезагрузите страницу</p>
+        </div>
+    `;
 }
-
-// Запускаем инициализацию при загрузке
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initCuttingPage);
-} else {
-    initCuttingPage();
-}
-
-// Экспортируем для внешнего доступа
-window.CuttingService = CuttingService;
-
-export default {
-    initializeCuttingCalculator,
-    performCutting: CuttingService.performCutting,
-    getSettings: CuttingService.getSettings
-};

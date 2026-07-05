@@ -5,7 +5,7 @@
     --background-color: #f5f7fa; /* Фон страницы */
     --card-background: #ffffff;  /* Фон форм */
     --text-color: #333333;       /* Текст */
-    --text-secondary: #666666;   /* Заголовки */
+    --text-secondary: #666666;   /* Вторичный текст */
     --border-color: #e0e0e0;     /* Рамка */
     --button-color: #ffffff99;     /* Фон кнопок */
 
@@ -32,12 +32,11 @@ html,
 body {
     /* Отключает горизонтальный скролл-эффект (включая навигацию свайпом) */
     overscroll-behavior-x: none;
-    /* Запред на обновление страницы при свайпе вниз */
+    /* Запрет на обновление страницы при свайпе вниз */
     overscroll-behavior-y: contain;
-    /* или none */
 }
 
-/* Запред на сохранение картинок */
+/* Запрет на сохранение картинок */
 .no-save {
     -webkit-user-select: none;
     -ms-user-select: none;
@@ -66,7 +65,7 @@ body {
     color: var(--text-color);
     line-height: 1.6;
     min-height: 100vh;
-    user-select: none;
+    /* Отключаем выделение только для UI-элементов; текст в таблицах/сообщениях можно выделять */
     -webkit-tap-highlight-color: transparent;
 }
 

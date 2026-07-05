@@ -1,0 +1,168 @@
+/* ==========================================================
+   Плагин: Измерение (measure.js)
+   Использует базовые классы .plugin-pill* из components.css.
+   Здесь только специфичные для измерения модификаторы:
+   цветовые состояния кнопок привязки (vertex/edge/face)
+   и контекстных действий (delete/confirm/position).
+   ========================================================== */
+
+/* Панель и кнопки наследуют стили от .plugin-pill / .plugin-pill-btn */
+
+.measure-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.measure-btn svg {
+    /* SVG с stroke (ребро, грань, корзина) — наследует stroke от currentColor */
+    stroke: var(--text-color);
+}
+
+/* --- Кнопки привязки (vertex / edge / face) — неактивные --- */
+
+.measure-btn[data-mode="vertex"] {
+    color: rgba(122, 162, 247, 0.6);
+}
+.measure-btn[data-mode="vertex"] svg {
+    fill: rgba(122, 162, 247, 0.6);
+    stroke: rgba(122, 162, 247, 0.6);
+}
+
+.measure-btn[data-mode="edge"] {
+    color: rgba(120, 160, 80, 0.6);
+}
+.measure-btn[data-mode="edge"] svg {
+    fill: rgba(120, 160, 80, 0.6);
+    stroke: rgba(120, 160, 80, 0.6);
+}
+
+.measure-btn[data-mode="face"] {
+    color: rgba(200, 155, 80, 0.6);
+}
+.measure-btn[data-mode="face"] svg {
+    fill: rgba(200, 155, 80, 0.6);
+    stroke: rgba(200, 155, 80, 0.6);
+}
+
+/* --- Кнопки привязки — активные --- */
+
+.measure-btn[data-mode="vertex"].active {
+    color: #5b8def;
+    background: rgba(91, 141, 239, 0.3);
+    border-color: rgba(91, 141, 239, 0.6);
+    box-shadow: 0 2px 8px rgba(91, 141, 239, 0.25);
+}
+.measure-btn[data-mode="vertex"].active svg {
+    fill: #5b8def;
+    stroke: #5b8def;
+}
+
+.measure-btn[data-mode="edge"].active {
+    color: #5a9e3a;
+    background: rgba(90, 158, 58, 0.3);
+    border-color: rgba(90, 158, 58, 0.6);
+    box-shadow: 0 2px 8px rgba(90, 158, 58, 0.25);
+}
+.measure-btn[data-mode="edge"].active svg {
+    fill: #5a9e3a;
+    stroke: #5a9e3a;
+}
+
+.measure-btn[data-mode="face"].active {
+    color: #c49030;
+    background: rgba(196, 144, 48, 0.3);
+    border-color: rgba(196, 144, 48, 0.6);
+    box-shadow: 0 2px 8px rgba(196, 144, 48, 0.25);
+}
+.measure-btn[data-mode="face"].active svg {
+    fill: #c49030;
+    stroke: #c49030;
+}
+
+/* --- Контекстные кнопки (delete / confirm / position) — неактивные --- */
+
+.measure-btn[data-action] {
+    color: var(--text-color);
+    opacity: 0.4;
+}
+
+/* --- Активное — Удалить (красный) --- */
+
+.measure-btn[data-action="delete"].active {
+    color: #e04040;
+    opacity: 1;
+    background: rgba(224, 64, 64, 0.25);
+    border-color: rgba(224, 64, 64, 0.6);
+    box-shadow: 0 2px 8px rgba(224, 64, 64, 0.25);
+}
+.measure-btn[data-action="delete"].active svg {
+    fill: #e04040;
+    stroke: #e04040;
+}
+
+/* --- Активное — Подтвердить (зелёный) --- */
+
+.measure-btn[data-action="confirm"].active {
+    color: #22a855;
+    opacity: 1;
+    background: rgba(34, 168, 85, 0.25);
+    border-color: rgba(34, 168, 85, 0.6);
+    box-shadow: 0 2px 8px rgba(34, 168, 85, 0.25);
+}
+.measure-btn[data-action="confirm"].active svg {
+    fill: #22a855;
+    stroke: #22a855;
+}
+
+/* --- Активное — Положение (оранжевый / линейный) --- */
+
+.measure-btn[data-action="position"].active {
+    color: #e07830;
+    opacity: 1;
+    background: rgba(224, 120, 48, 0.25);
+    border-color: rgba(224, 120, 48, 0.6);
+    box-shadow: 0 2px 8px rgba(224, 120, 48, 0.25);
+}
+.measure-btn[data-action="position"].active svg {
+    fill: #e07830;
+    stroke: #e07830;
+}
+
+/* --- Активное — Положение (золотой / угловой) --- */
+
+.measure-btn[data-action="position"].active-angle {
+    color: #b8862a;
+    opacity: 1;
+    background: rgba(184, 134, 42, 0.25);
+    border-color: rgba(184, 134, 42, 0.6);
+    box-shadow: 0 2px 8px rgba(184, 134, 42, 0.25);
+}
+.measure-btn[data-action="position"].active-angle svg {
+    fill: #b8862a;
+    stroke: #b8862a;
+}
+
+/* Выделение метки измерения */
+.meas-label-selected {
+    outline: 2px solid rgba(187, 154, 247, 0.9) !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 12px rgba(187, 154, 247, 0.5) !important;
+}
+
+/* Тач-риппл */
+.touch-ripple {
+    position: absolute;
+    pointer-events: none;
+    z-index: 25;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid rgba(122, 162, 247, 0.8);
+    animation: measureRippleAnim 0.5s ease-out forwards;
+}
+
+@keyframes measureRippleAnim {
+    0% { transform: translate(-50%, -50%) scale(0.3); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+}

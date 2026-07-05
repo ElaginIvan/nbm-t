@@ -1,17 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Model Viewer</title>
     <link rel="stylesheet" href="css/main.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="assets/icons/sprite.svg">
 </head>
 
 <body>
-
 
     <!-- Основной контейнер -->
     <div class="project-container">
@@ -28,25 +25,25 @@
             <!-- Правая группа кнопок -->
             <div class="button-group">
                 <!-- Кнопка переключения 3D/2D -->
-                <a href="#" id="toggle-3d-2d-btn" class="toggle-3d-2d-button">
+                <button type="button" id="toggle-3d-2d-btn" class="toggle-3d-2d-button" aria-label="Переключить 2D/3D">
                     <svg>
                         <use xlink:href="assets/icons/sprite.svg#image"></use>
                     </svg>
-                </a>
+                </button>
 
                 <!-- Кнопка развертывания -->
-                <a href="#" id="toggle-fullscreen-btn" class="expand-button">
+                <button type="button" id="toggle-fullscreen-btn" class="expand-button" aria-label="Полноэкранный режим">
                     <svg>
                         <use xlink:href="assets/icons/sprite.svg#expand"></use>
                     </svg>
-                </a>
+                </button>
 
                 <!-- Кнопка настроек -->
-                <a href="#" id="settings-btn" class="settings-button">
+                <button type="button" id="settings-btn" class="settings-button" aria-label="Настройки">
                     <svg>
                         <use xlink:href="assets/icons/sprite.svg#gear"></use>
                     </svg>
-                </a>
+                </button>
             </div>
         </div>
 
@@ -76,7 +73,7 @@
         <div class="resize-handle" id="resize-handle">
             <div class="resize-handle-line"></div>
             <!-- ЗАМЕНЯЕМ dots на кнопку -->
-            <button id="view-toggle-btn" class="view-toggle-button">
+            <button type="button" id="view-toggle-btn" class="view-toggle-button" aria-label="Переключить вкладку спецификация/раскрой">
                 <svg>
                     <use xlink:href="assets/icons/sprite.svg#cut"></use>
                 </svg>
@@ -117,7 +114,7 @@
                                 <div class="control-group">
                                     <label for="kerfSelect">Ширина реза:</label>
                                     <select id="kerfSelect">
-                                        <option value="0" selected>0 мм</option>
+                                        <option value="0">0 мм</option>
                                         <option value="1" selected>1 мм</option>
                                         <option value="1.6">1.6 мм</option>
                                         <option value="2">2 мм</option>
@@ -130,7 +127,7 @@
                                 </div>
                             </div>
 
-                            <button id="cutButton" class="cut-btn">Раскроить</button>
+                            <button type="button" id="cutButton" class="cut-btn">Раскроить</button>
                         </div>
 
                         <div id="results-container" class="cutting-results">
@@ -160,24 +157,13 @@
     }
     </script>
 
-    <!-- Основные скрипты -->
-    <!-- Store должен быть загружен первым -->
-    <script src="js/store.js" type="module"></script>
-    <script src="js/dataService.js" type="module"></script>
-    <script src="js/project.js" type="module"></script>
-
-    <script src="js/3d-viewer/model.js" type="module"></script>
-    
-    <!-- 2D viewer модули -->
-    <script src="js/2d-viewer/ui-manager.js" type="module"></script>
-    <script src="js/2d-viewer/drawing-loader.js" type="module"></script>
-    <script src="js/2d-viewer/drawing-viewer.js" type="module"></script>
-
-    <script src="js/fullscreen-manager.js" type="module"></script>
-    <script src="js/resize-handler.js" type="module"></script>
-    <script src="js/settings-manager.js" type="module"></script>
-
-    <script src="js/cutting.js" type="module"></script>
+    <!-- Модули приложения (порядок важен: зависимости первыми) -->
+    <!-- specification.js, cutting.js, 2d-viewer.js загружаются динамически из ui-managers.js -->
+    <script src="js/app.js" type="module"></script>
+    <script src="js/plugin-system.js" type="module"></script>
+    <script src="js/engine.js" type="module"></script>
+    <script src="js/3d-viewer.js" type="module"></script>
+    <script src="js/ui-managers.js" type="module"></script>
 </body>
 
 </html>

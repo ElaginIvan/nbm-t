@@ -1,229 +1,105 @@
 /**
  * Gallery Module
- * Отвечает за отображение и управление галереей проектов
+ * Галерея проектов (страница index.html)
+ *
+ * Выделено из app.js — содержит:
+ * - GalleryDomUtils — создание карточек проектов
+ * - Gallery — загрузка, рендер и навигация по проектам
  */
 
-import { DataService } from './dataService.js';
-import { store } from './store.js';
+import { DataService, escapeHtml } from './app.js';
 
 // ============================================================
-// Утилиты для работы с DOM
+// DOM-утилиты галереи
 // ============================================================
 
-const DomUtils = {
-    /**
-     * Создает HTML элемент карточки проекта
-     * @param {Object} project - Объект проекта
-     * @returns {HTMLElement} Элемент карточки
-     */
+const GalleryDomUtils = {
     createProjectCardElement(project) {
         const card = document.createElement('div');
         card.className = 'model-card';
         card.dataset.id = project.id;
-
         card.innerHTML = `
             <div class="model-preview no-save">
-                <img src="${project.previewImage}" alt="${project.name}"
+                <img src="${escapeHtml(project.previewImage)}" alt="${escapeHtml(project.name)}"
                      onerror="this.src='https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400&h=300&fit=crop'">
             </div>
-
             <div class="model-info">
-                <h3>${project.name}</h3>
-                <p class="model-description">${project.description}</p>
-                <button class="open-model">
-                    Открыть
-                </button>
+                <h3>${escapeHtml(project.name)}</h3>
+                <p class="model-description">${escapeHtml(project.description)}</p>
+                <button class="open-model">Открыть</button>
             </div>
         `;
-
         return card;
     },
 
-    /**
-     * Рендерит массив проектов в контейнер
-     * @param {Array} projects - Массив проектов
-     * @param {HTMLElement} container - Контейнер для рендеринга
-     */
     renderProjects(projects, container) {
         const fragment = document.createDocumentFragment();
-
-        projects.forEach(project => {
-            const card = this.createProjectCardElement(project);
-            fragment.appendChild(card);
-        });
-
+        projects.forEach(project => fragment.appendChild(this.createProjectCardElement(project)));
         container.innerHTML = '';
         container.appendChild(fragment);
     }
 };
 
 // ============================================================
-// Обработчики событий
+// Gallery
 // ============================================================
 
-const EventHandlers = {
-    /**
-     * Обработчик клика по карточке проекта
-     * @param {Event} event - Событие клика
-     */
-    handleCardClick(event) {
-        const card = event.currentTarget;
-        const projectId = card.dataset.id;
-
-        if (!event.target.closest('.open-model')) {
-            Gallery.openProject(projectId);
-        }
-    },
-
-    /**
-     * Обработчик клика по кнопке "Открыть"
-     * @param {Event} event - Событие клика
-     */
-    handleOpenButtonClick(event) {
-        event.stopPropagation();
-        const card = event.target.closest('.model-card');
-        const projectId = card.dataset.id;
-        Gallery.openProject(projectId);
-    }
-};
-
-// ============================================================
-// Основной модуль галереи
-// ============================================================
-
-export const Gallery = {
-    /**
-     * Инициализирует галерею
-     */
+const Gallery = {
     async init() {
         try {
             const gridContainer = document.getElementById('models-grid');
-            if (!gridContainer) {
-                console.log('Gallery container not found, skipping initialization');
-                return;
-            }
+            if (!gridContainer) return;
 
-            // Загружаем проекты
             const projects = await DataService.loadProjects();
-
             if (projects.length === 0) {
-                this.showNoProjectsMessage();
+                this._showMessage(gridContainer, 'folder-open', 'Проекты не найдены', 'Список проектов пуст.');
                 return;
             }
 
-            // Рендерим проекты
-            DomUtils.renderProjects(projects, gridContainer);
-
-            // Добавляем обработчики событий
-            this.addEventListeners();
-
-            console.log('Gallery initialized with', projects.length, 'projects');
-
+            GalleryDomUtils.renderProjects(projects, gridContainer);
+            this._bindCardEvents(gridContainer);
         } catch (error) {
             console.error('Error initializing gallery:', error);
-            this.showErrorMessage();
+            const gridContainer = document.getElementById('models-grid');
+            if (gridContainer) {
+                this._showMessage(gridContainer, 'triangle-exclamation',
+                    'Не удалось загрузить проекты',
+                    'Пожалуйста, проверьте подключение к интернету и попробуйте еще раз.');
+            }
         }
     },
 
     /**
-     * Добавляет обработчики событий к элементам галереи
+     * Привязка обработчиков клика к карточкам проектов.
      */
-    addEventListeners() {
-        // Обработчики для карточек
-        document.querySelectorAll('.model-card').forEach(card => {
-            card.addEventListener('click', EventHandlers.handleCardClick);
-        });
-
-        // Обработчики для кнопок "Открыть"
-        document.querySelectorAll('.open-model').forEach(button => {
-            button.addEventListener('click', EventHandlers.handleOpenButtonClick);
+    _bindCardEvents(container) {
+        container.querySelectorAll('.model-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                this.openProject(card.dataset.id);
+            });
         });
     },
 
-    /**
-     * Открывает проект
-     * @param {string} projectId - ID проекта
-     */
     openProject(projectId) {
-        // Сохраняем в store и localStorage
         DataService.setSelectedProject(projectId);
         window.location.href = 'project.html';
     },
 
-    /**
-     * Показывает сообщение об ошибке
-     */
-    showErrorMessage() {
-        const gridContainer = document.getElementById('models-grid');
-        if (gridContainer) {
-            gridContainer.innerHTML = `
-                <div class="error-message" style="
-                    grid-column: 1/-1;
-                    text-align: center;
-                    padding: 40px;
-                    color: #666;
-                ">
-                    <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 20px;"></i>
-                    <h3>Не удалось загрузить проекты</h3>
-                    <p>Пожалуйста, проверьте подключение к интернету и попробуйте еще раз.</p>
-                </div>
-            `;
-        }
+    /** Общий рендер сообщений в галерее (пусто/ошибка/нет проектов) */
+    _showMessage(container, icon, title, text) {
+        container.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #666;">
+                <svg aria-hidden="true" style="width: 52px; height: 52px; fill: #666; margin-bottom: 20px;">
+                    <use xlink:href="assets/icons/sprite.svg#${escapeHtml(icon)}"></use>
+                </svg>
+                <h3>${escapeHtml(title)}</h3>
+                <p>${escapeHtml(text)}</p>
+            </div>
+        `;
     },
-
-    /**
-     * Показывает сообщение когда проектов нет
-     */
-    showNoProjectsMessage() {
-        const gridContainer = document.getElementById('models-grid');
-        if (gridContainer) {
-            gridContainer.innerHTML = `
-                <div class="empty-message" style="
-                    grid-column: 1/-1;
-                    text-align: center;
-                    padding: 40px;
-                    color: #666;
-                ">
-                    <i class="fas fa-folder-open" style="font-size: 48px; margin-bottom: 20px;"></i>
-                    <h3>Проекты не найдены</h3>
-                    <p>Список проектов пуст.</p>
-                </div>
-            `;
-        }
-    },
-
-    /**
-     * Обновляет галерею с новыми данными
-     * @param {Array} projects - Массив проектов
-     */
-    update(projects) {
-        const gridContainer = document.getElementById('models-grid');
-        if (gridContainer) {
-            DomUtils.renderProjects(projects, gridContainer);
-            this.addEventListeners();
-        }
-    },
-
-    /**
-     * Получает текущие проекты из store
-     * @returns {Array|null}
-     */
-    getProjects() {
-        return store.getState('project.data');
-    }
 };
 
-// ============================================================
-// Автоматическая инициализация
-// ============================================================
-
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => Gallery.init());
-} else {
-    Gallery.init();
-}
-
-// Экспортируем для внешнего доступа
-window.Gallery = Gallery;
+// Автоинициализация на странице галереи
+Gallery.init();
 
 export default Gallery;

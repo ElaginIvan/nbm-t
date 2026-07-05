@@ -183,7 +183,6 @@
     padding-left: var(--spacing-sm);
     padding-right: var(--spacing-sm);
     margin: 0 calc(-1 * var(--spacing-sm));
-    padding-left: var(--spacing-sm);
     border-radius: var(--radius-md);
     background: rgba(74, 158, 255, 0.03);
 }
