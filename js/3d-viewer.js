@@ -38,6 +38,7 @@ import {
 import './plugins/cutting-3d.js';
 import './plugins/measure.js';
 import './plugins/animation.js';
+import './plugins/center-of-mass.js';
 
 // ============================================================
 // model-utils.js
