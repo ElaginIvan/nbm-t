@@ -695,6 +695,8 @@ PluginManager.register({
                         // Клик по уже включённой (но не активной) оси → переключаем drag на неё
                         _store.setState('cutting3d.activeAxis', clickedAxis);
                         createVisiblePlane(clickedAxis);
+                        drag.isVisible = true;
+                        updateVisibilityButton(visibilityBtn);
                     } else {
                         // Новая ось → включаем и делаем активной
                         enabledAxes[clickedAxis] = true;

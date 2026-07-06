@@ -26,6 +26,12 @@ let _api = null;                // API модуля 3d-viewer
 let _modelLoadedHandler = null;
 let _storeUnsubscribe = null;  // отписка от store
 
+// Переиспользуемые векторы для автопереворота меток (avoid GC)
+const _flipWorldPos = new THREE.Vector3();
+const _flipQuat = new THREE.Quaternion();
+const _flipNormal = new THREE.Vector3();
+const _flipToCam = new THREE.Vector3();
+
 // ============================================================
 // ВЫЧИСЛЕНИЕ ЦЕНТРА МАСС
 // ============================================================
@@ -267,6 +273,18 @@ function _show() {
         const label = _makeAxisLabel(ax.text, ax.css, lh);
         label.position.copy(ax.labelPos);
         label.rotation.copy(ax.labelRot);
+
+        // Автопереворот: если камера сзади — отзеркалить по локальной X,
+        // чтобы текст всегда читался нормально
+        label.onBeforeRender = () => {
+            if (!_api?.camera) return;
+            label.getWorldPosition(_flipWorldPos);
+            label.getWorldQuaternion(_flipQuat);
+            _flipNormal.set(0, 0, 1).applyQuaternion(_flipQuat);
+            _flipToCam.subVectors(_api.camera.position, _flipWorldPos).normalize();
+            label.scale.x = _flipNormal.dot(_flipToCam) < 0 ? -1 : 1;
+        };
+
         _group.add(label);
     }
 
