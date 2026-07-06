@@ -216,7 +216,7 @@ function _show() {
             labelPos: new THREE.Vector3(-distX - labelGap, 0, 0),
             // PlaneGeometry (XY, нормаль +Z) → поворот 90° вокруг Y → плоскость YZ, нормаль вдоль X
             labelRot: new THREE.Euler(0, Math.PI / 2, 0),
-            text: `от края: ${(distX * 1000).toFixed(1)} мм`,
+            text: `от края: ${(distX * 1000).toFixed(0)} мм`,
         },
         {
             dist: distY,
@@ -225,7 +225,7 @@ function _show() {
             labelPos: new THREE.Vector3(0, -distY - labelGap, 0),
             // поворот -90° вокруг X → плоскость XZ, нормаль вдоль Y
             labelRot: new THREE.Euler(-Math.PI / 2, 0, 0),
-            text: `от низа: ${(distY * 1000).toFixed(1)} мм`,
+            text: `от низа: ${(distY * 1000).toFixed(0)} мм`,
         },
         {
             dist: distZ,
@@ -234,7 +234,7 @@ function _show() {
             labelPos: new THREE.Vector3(0, 0, -distZ - labelGap),
             // без поворота — плоскость XY, нормаль вдоль Z
             labelRot: new THREE.Euler(0, 0, 0),
-            text: `от края: ${(distZ * 1000).toFixed(1)} мм`,
+            text: `от края: ${(distZ * 1000).toFixed(0)} мм`,
         },
     ];
 
@@ -271,12 +271,6 @@ function _show() {
     }
 
     _api.scene.add(_group);
-
-    console.log(
-        `[CenterOfMass] от низа: ${(distY * 1000).toFixed(1)} мм,` +
-        ` от края X: ${(distX * 1000).toFixed(1)} мм,` +
-        ` от края Z: ${(distZ * 1000).toFixed(1)} мм`
-    );
 }
 
 /** Удалить маркер и освободить ресурсы. */
