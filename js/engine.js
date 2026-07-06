@@ -98,15 +98,12 @@ function createAdaptiveGrid(scene) {
     mainGrid.material.opacity = GRID_OPACITY;
     mainGrid.material.transparent = true;
     mainGrid.material.receiveShadow = false;
-    mainGrid.material.depthWrite = false;
 
     const axisLength = size / 2, axisWidth = 0.3;
     const axesGroup = new THREE.Group();
 
     const planeX = new THREE.Mesh(
         new THREE.PlaneGeometry(axisLength * 2, axisWidth),
-        mainGrid.material.depthWrite = false,
-
         new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: GRID_OPACITY, side: THREE.DoubleSide })
     );
     planeX.rotation.x = -Math.PI / 2;
@@ -115,8 +112,6 @@ function createAdaptiveGrid(scene) {
 
     const planeZ = new THREE.Mesh(
         new THREE.PlaneGeometry(axisWidth, axisLength * 2),
-        mainGrid.material.depthWrite = false,
-
         new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: GRID_OPACITY, side: THREE.DoubleSide })
     );
     planeZ.rotation.x = -Math.PI / 2;
