@@ -55,6 +55,15 @@
             "modelFile": "models/roof-70/model.glb",
             "drawingsPath": "models/roof-70/avif",
             "specFile": "models/roof-70/spec.csv"
+        },
+                {
+            "id": "psl-6",
+            "name": "Площадка с лестницей",
+            "description": "Площадка с лестницей L=6 метров.",
+            "previewImage": "models/psl-6/preview.png",
+            "modelFile": "models/psl-6/model.glb",
+            "drawingsPath": "models/rpsl-6/avif",
+            "specFile": "models/psl-6/spec.csv"
         }
     ]
 }
