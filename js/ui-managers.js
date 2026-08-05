@@ -8,8 +8,9 @@
  * - SettingsManager (модальное окно настроек)
  */
 
-import { store, onReady, withModel, adjustEdgeColor, escapeHtml } from './app.js';
+import { store, onReady, withModel, escapeHtml } from './app.js';
 import { SpecificationService } from './specification.js';
+import PluginManager from './plugin-system.js';
 
 // ============================================================
 // FULLSCREEN MANAGER
@@ -415,23 +416,8 @@ export const SettingsManager = {
                         </div>
                     </div>
                     <div class="settings-section">
-                        <h3>3D Модель</h3>
-                        <div class="setting-item">
-                            <label for="model-color-picker">Цвет модели</label>
-                            <input type="color" id="model-color-picker" value="#CCCCCC">
-                        </div>
-                        <div class="setting-item">
-                            <label for="model-metalness-range">Металличность: <span id="model-metalness-value">0.1</span></label>
-                            <input type="range" id="model-metalness-range" min="0" max="1" step="0.01" value="0.1">
-                        </div>
-                        <div class="setting-item">
-                            <label for="model-roughness-range">Шероховатость: <span id="model-roughness-value">0.75</span></label>
-                            <input type="range" id="model-roughness-range" min="0" max="1" step="0.01" value="0.75">
-                        </div>
-                        <div class="setting-item">
-                            <label for="model-edges-toggle">Отображать рёбра</label>
-                            <input type="checkbox" id="model-edges-toggle" checked>
-                        </div>
+                        <h3>Плагины</h3>
+                        <div id="plugin-settings-table" class="plugin-table"></div>
                     </div>
                 </div>
             </div>
@@ -452,6 +438,7 @@ export const SettingsManager = {
         });
 
         this._bindSettingsHandlers();
+        this._buildPluginAutoList();
     },
 
     _bindSettingsHandlers() {
@@ -463,43 +450,6 @@ export const SettingsManager = {
             });
         }
 
-        const colorPicker = document.getElementById('model-color-picker');
-        if (colorPicker) {
-            colorPicker.addEventListener('input', (e) => {
-                this._saveSetting('modelColor', e.target.value);
-                this._applyModelColor(e.target.value);
-            });
-        }
-
-        const metalnessRange = document.getElementById('model-metalness-range');
-        const metalnessValue = document.getElementById('model-metalness-value');
-        if (metalnessRange && metalnessValue) {
-            metalnessRange.addEventListener('input', (e) => {
-                const value = parseFloat(e.target.value);
-                metalnessValue.textContent = value.toFixed(2);
-                this._saveSetting('modelMetalness', value);
-                this._applyModelMetalness(value);
-            });
-        }
-
-        const roughnessRange = document.getElementById('model-roughness-range');
-        const roughnessValue = document.getElementById('model-roughness-value');
-        if (roughnessRange && roughnessValue) {
-            roughnessRange.addEventListener('input', (e) => {
-                const value = parseFloat(e.target.value);
-                roughnessValue.textContent = value.toFixed(2);
-                this._saveSetting('modelRoughness', value);
-                this._applyModelRoughness(value);
-            });
-        }
-
-        const edgesToggle = document.getElementById('model-edges-toggle');
-        if (edgesToggle) {
-            edgesToggle.addEventListener('change', (e) => {
-                this._saveSetting('modelEdgesEnabled', e.target.checked);
-                this._applyModelEdgesVisibility(e.target.checked);
-            });
-        }
     },
 
     open() {
@@ -522,27 +472,6 @@ export const SettingsManager = {
         const themeSelect = document.getElementById('theme-mode-select');
         if (themeSelect && settings?.themeMode) themeSelect.value = settings.themeMode;
 
-        const colorPicker = document.getElementById('model-color-picker');
-        if (colorPicker && settings?.modelColor) colorPicker.value = settings.modelColor;
-
-        if (settings?.modelMetalness !== undefined) {
-            const metalnessRange = document.getElementById('model-metalness-range');
-            const metalnessValue = document.getElementById('model-metalness-value');
-            if (metalnessRange) metalnessRange.value = settings.modelMetalness;
-            if (metalnessValue) metalnessValue.textContent = parseFloat(settings.modelMetalness).toFixed(2);
-        }
-
-        if (settings?.modelRoughness !== undefined) {
-            const roughnessRange = document.getElementById('model-roughness-range');
-            const roughnessValue = document.getElementById('model-roughness-value');
-            if (roughnessRange) roughnessRange.value = settings.modelRoughness;
-            if (roughnessValue) roughnessValue.textContent = parseFloat(settings.modelRoughness).toFixed(2);
-        }
-
-        if (settings?.modelEdgesEnabled !== undefined) {
-            const edgesToggle = document.getElementById('model-edges-toggle');
-            if (edgesToggle) edgesToggle.checked = settings.modelEdgesEnabled;
-        }
     },
 
     _saveSetting(key, value) {
@@ -560,44 +489,83 @@ export const SettingsManager = {
         }
     },
 
-    _applyModelColor(color) {
-        withModel((model) => {
-            model.traverse((child) => {
-                if (child.isMesh && child.material) child.material.color.set(color);
-                if (child.isLineSegments && child.material) {
-                    child.material.color.set(adjustEdgeColor(color, 0.10));
+    // ============================================================
+    // ПЛАГИНЫ — одна таблица: имя | вкл/выкл | автозапуск
+    // ============================================================
+
+    _buildPluginAutoList() {
+        const table = document.getElementById('plugin-settings-table');
+        if (!table) return;
+
+        const knownPlugins = [
+            { id: 'view-display', name: 'Вид (тени, сетка, рёбра)' },
+            { id: 'measure', name: 'Измерение' },
+            { id: 'cutting-3d', name: 'Сечение' },
+            { id: 'center-of-mass', name: 'Центр масс' },
+            { id: 'animation', name: 'Анимация' },
+            { id: 'transform-gizmo', name: 'Перемещение' },
+            { id: 'camera-background', name: 'Камера AR' }
+        ];
+
+        // Заголовок таблицы
+        const header = document.createElement('div');
+        header.className = 'plugin-table-header';
+        header.innerHTML = `
+            <span class="plugin-table-name"></span>
+            <div class="plugin-table-checks">
+                <span class="plugin-table-col-title">Вкл</span>
+                <span class="plugin-table-col-title">Авто</span>
+            </div>
+        `;
+        table.appendChild(header);
+
+        knownPlugins.forEach(p => {
+            const isEnabled = PluginManager.isPluginEnabled(p.id);
+            const isAutoStart = PluginManager.isPluginAutoStart(p.id);
+
+            const row = document.createElement('div');
+            row.className = 'plugin-table-row' + (!isEnabled ? ' disabled' : '');
+            row.innerHTML = `
+                <span class="plugin-table-name">${p.name}</span>
+                <div class="plugin-table-checks">
+                    <label class="plugin-table-check" title="Включён">
+                        <input type="checkbox" data-plugin-id="${p.id}" data-role="enabled" ${isEnabled ? 'checked' : ''}>
+                        <span class="plugin-table-check-visual"></span>
+                    </label>
+                    <label class="plugin-table-check" title="Автозапуск">
+                        <input type="checkbox" data-plugin-id="${p.id}" data-role="autostart" ${isAutoStart ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}>
+                        <span class="plugin-table-check-visual"></span>
+                    </label>
+                </div>
+            `;
+            table.appendChild(row);
+
+            const cbEnabled = row.querySelector('[data-role="enabled"]');
+            const cbAutostart = row.querySelector('[data-role="autostart"]');
+
+            cbEnabled.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const enabled = cbEnabled.checked;
+                PluginManager.setPluginEnabled(p.id, enabled);
+                row.classList.toggle('disabled', !enabled);
+
+                if (!enabled) {
+                    cbAutostart.checked = false;
+                    cbAutostart.disabled = true;
+                    PluginManager.setPluginAutoStart(p.id, false);
+                } else {
+                    cbAutostart.disabled = false;
+                }
+
+                // Обновляем док-панель
+                if (window._pluginUIController) {
+                    window._pluginUIController.togglePluginEnabled(p.id, enabled);
                 }
             });
-        });
-        if (window.ModelCut?.updateCapColor) window.ModelCut.updateCapColor();
-    },
 
-    _applyModelMetalness(value) {
-        withModel((model) => {
-            model.traverse((child) => {
-                if (child.isMesh && child.material) {
-                    child.material.metalness = value;
-                    child.material.dithering = true;
-                }
-            });
-        });
-    },
-
-    _applyModelRoughness(value) {
-        withModel((model) => {
-            model.traverse((child) => {
-                if (child.isMesh && child.material) {
-                    child.material.roughness = value;
-                    child.material.dithering = true;
-                }
-            });
-        });
-    },
-
-    _applyModelEdgesVisibility(enabled) {
-        withModel((model) => {
-            model.traverse((child) => {
-                if (child.isLineSegments) child.visible = enabled;
+            cbAutostart.addEventListener('change', (e) => {
+                e.stopPropagation();
+                PluginManager.setPluginAutoStart(p.id, cbAutostart.checked);
             });
         });
     }

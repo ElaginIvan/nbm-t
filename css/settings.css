@@ -194,37 +194,6 @@
 }
 
 /* Инпуты */
-.setting-item input[type="color"] {
-    width: 48px;
-    height: 32px;
-    border: 2px solid var(--border-color);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    padding: 2px;
-    background: var(--card-background);
-    transition: all var(--transition);
-}
-
-.setting-item input[type="color"]:hover {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
-}
-
-.setting-item input[type="color"]::-webkit-color-swatch-wrapper {
-    padding: 0;
-    border-radius: calc(var(--radius-md) - 2px);
-}
-
-.setting-item input[type="color"]::-webkit-color-swatch {
-    border: none;
-    border-radius: calc(var(--radius-md) - 2px);
-}
-
-.setting-item input[type="color"]::-moz-color-swatch {
-    border: none;
-    border-radius: calc(var(--radius-md) - 2px);
-}
-
 .setting-item input[type="range"] {
     width: 140px;
     height: 6px;
@@ -292,39 +261,6 @@
     box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
 }
 
-.setting-item input[type="checkbox"] {
-    width: 22px;
-    height: 22px;
-    cursor: pointer;
-    appearance: none;
-    -webkit-appearance: none;
-    position: relative;
-    background: var(--card-background);
-    border: 2px solid var(--border-color);
-    border-radius: 6px;
-    transition: all var(--transition);
-}
-
-.setting-item input[type="checkbox"]:hover {
-    border-color: var(--primary-color);
-}
-
-.setting-item input[type="checkbox"]:checked {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #2c7be5 100%);
-    border-color: var(--primary-color);
-}
-
-.setting-item input[type="checkbox"]:checked::after {
-    content: '✓';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: white;
-    font-size: 14px;
-    font-weight: bold;
-}
-
 /* Select элементы */
 .setting-item select {
     padding: 8px 32px 8px 12px;
@@ -350,6 +286,125 @@
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
+}
+
+/* Таблица плагинов (одна таблица: имя | вкл | автозапуск) */
+.plugin-table {
+    display: flex;
+    flex-direction: column;
+}
+
+.plugin-table-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(224, 224, 224, 0.15);
+    transition: opacity 0.2s;
+}
+
+.plugin-table-row:last-child {
+    border-bottom: none;
+}
+
+.plugin-table-row.disabled {
+    opacity: 0.4;
+}
+
+.plugin-table-row.disabled .plugin-table-check input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+}
+
+.plugin-table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 0 6px 0;
+    border-bottom: 1px solid rgba(224, 224, 224, 0.3);
+    margin-bottom: 4px;
+}
+
+.plugin-table-header .plugin-table-checks {
+    gap: 14px;
+}
+
+.plugin-table-col-title {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    width: 20px;
+    text-align: center;
+}
+
+.plugin-table-name {
+    font-size: 0.88rem;
+    color: var(--text-color);
+    flex: 1;
+    padding-right: 12px;
+}
+
+.plugin-table-checks {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.plugin-table-check {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.plugin-table-check input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    z-index: 1;
+    margin: 0;
+}
+
+.plugin-table-check-visual {
+    width: 20px;
+    height: 20px;
+    background: var(--card-background);
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    transition: all var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.plugin-table-check input[type="checkbox"]:hover + .plugin-table-check-visual {
+    border-color: var(--primary-color);
+}
+
+.plugin-table-check input[type="checkbox"]:checked + .plugin-table-check-visual {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #2c7be5 100%);
+    border-color: var(--primary-color);
+}
+
+.plugin-table-check input[type="checkbox"]:checked + .plugin-table-check-visual::after {
+    content: '\2713';
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.plugin-table-check input[type="checkbox"]:disabled + .plugin-table-check-visual {
+    cursor: not-allowed;
+    opacity: 0.5;
 }
 
 /* Значения рядом с инпутами */
@@ -385,8 +440,4 @@ body.settings-open {
         width: 120px;
     }
 
-    .setting-item input[type="checkbox"] {
-        width: 20px;
-        height: 20px;
-    }
 }

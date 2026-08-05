@@ -39,11 +39,32 @@ const cutObjects = {
 const originalMaterials = new WeakMap();
 const materialCache = new Map();
 
+// Связь «оригинальный меш модели → его stencil-меши (back+front по каждой оси)».
+// Нужна для синхронизации видимости: если деталь спрятали (mesh.visible=false
+// или скрыт её предок в дереве сборки), соответствующие stencil-меши тоже
+// прячутся → cap-плоскость больше не рисует «заглушку» в этом месте.
+const meshToStencilMeshes = new WeakMap();
+
+// Список мешей, у которых есть зарегистрированные stencil-меши.
+// Используется для быстрого обхода в syncPartVisibility без полного traverse модели.
+const registeredMeshes = new Set();
+
+// RAF-идентификатор цикла синхронизации видимости.
+let _visSyncRAF = null;
+
 const capOptions = {
     color: null,
     metalness: 0.1,
     roughness: 0.75,
-    planeSize: 100,
+    // Размеры cap-плоскости по каждой оси сечения.
+    // Локальная X-ось PlaneGeometry после lookAt отображается на одну из мировых осей,
+    // перпендикулярных нормали (зависит от оси — см. computeModelBounds).
+    // Запас MARGIN перекрывает численную погрешность stencil-обрезки.
+    planeSizes: {
+        x: { w: 100, h: 100 },
+        y: { w: 100, h: 100 },
+        z: { w: 100, h: 100 }
+    },
     useModelColor: true
 };
 
@@ -71,10 +92,22 @@ const drag = {
     helperPlane: null,  // THREE.Plane — невидимая плоскость для проекции
     startAxisValue: 0,
 
+    // Активные указатели — для распознавания multi-touch.
+    // Ключ — pointerId, значение — {x, y}. Если size > 1 — это жест двумя
+    // пальцами (pinch-zoom / pan), в этом случае плоскость сечения
+    // не реагирует, управление отдаётся OrbitControls.
+    activePointers: new Map(),
+
+    // Сохранённое состояние OrbitControls на момент начала drag плоскости,
+    // чтобы после завершения drag вернуть именно его, а не переопределять.
+    _savedControlsState: null,
+
     // Ссылки на обработчики для cleanup
     _ptrDown: null,
     _ptrMove: null,
     _ptrUp: null,
+    _ptrCancel: null,
+    _touchPrevent: null,
 };
 
 // ============================================================
@@ -100,7 +133,20 @@ function computeModelBounds() {
     _store.setState('cutting3d.axisValues', initialValues);
     const size = new THREE.Vector3();
     box.getSize(size);
-    capOptions.planeSize = Math.max(size.x, size.y, size.z) * 1.5;
+    // Per-axis прямоугольные размеры cap-плоскости.
+    // Cap-плоскость перпендикулярна оси сечения, поэтому её ширина и высота —
+    // это два ДРУГИХ измерения модели (с небольшим запасом).
+    // Соответствие локальных осей PlaneGeometry → мировым осям после lookAt
+    // (с дефолтным up=(0,1,0), см. Matrix4.lookAt в three.js):
+    //   ось 'x' (нормаль ±X): local X → мир Z, local Y → мир Y
+    //   ось 'y' (нормаль ±Y): local X → мир X, local Y → мир Z
+    //   ось 'z' (нормаль ±Z): local X → мир X, local Y → мир Y
+    const MARGIN = 1.1; // +10% на каждое измерение — для запаса под stencil-обрезку
+    capOptions.planeSizes = {
+        x: { w: size.z * MARGIN, h: size.y * MARGIN },
+        y: { w: size.x * MARGIN, h: size.z * MARGIN },
+        z: { w: size.x * MARGIN, h: size.y * MARGIN }
+    };
 }
 
 function getModelBaseColor() {
@@ -143,7 +189,7 @@ function createPlaneStencilGroup(geometry, plane, renderOrder) {
     return group;
 }
 
-function createCapPlane(plane, renderOrder, otherPlanes) {
+function createCapPlane(plane, renderOrder, otherPlanes, axis) {
     const capColor = capOptions.useModelColor ? (capOptions.color || getModelBaseColor()) : (capOptions.color || 0xCCCCCC);
     const material = new THREE.MeshStandardMaterial({
         color: capColor, metalness: capOptions.metalness, roughness: capOptions.roughness,
@@ -152,16 +198,40 @@ function createCapPlane(plane, renderOrder, otherPlanes) {
         stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp,
         side: THREE.DoubleSide, dithering: true
     });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(capOptions.planeSize, capOptions.planeSize), material);
+    // Прямоугольная cap-плоскость с размерами, подобранными под ось сечения.
+    // Раньше была квадратная planeSize×planeSize (1.5× от макс. измерения) —
+    // это приводило к избыточной геометрии для вытянутых моделей.
+    const sizes = capOptions.planeSizes[axis] || { w: 100, h: 100 };
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sizes.w, sizes.h), material);
     mesh.renderOrder = renderOrder + 0.1;
     mesh.onAfterRender = () => { if (cutRefs.renderer) cutRefs.renderer.clearStencil(); };
     return mesh;
 }
 
-function updateCapPlanePosition(capPlane, plane) {
+function updateCapPlanePosition(capPlane, plane, axis) {
     if (!capPlane || !plane) return;
-    plane.coplanarPoint(capPlane.position);
-    capPlane.lookAt(capPlane.position.x - plane.normal.x, capPlane.position.y - plane.normal.y, capPlane.position.z - plane.normal.z);
+    // Центрируем cap-плоскость на центре bounding box модели (в перпендикулярных осях),
+    // а не на проекции origin, как было раньше через plane.coplanarPoint().
+    // coplanarPoint возвращает ближайшую к origin точку плоскости — для моделей,
+    // смещённых от начала координат, cap-плоскость оказывалась в стороне от модели.
+    const bounds = _store.getState('cutting3d.axisBounds');
+    const axisValue = _store.getState('cutting3d.axisValues')[axis];
+    const cx = (bounds.x.min + bounds.x.max) / 2;
+    const cy = (bounds.y.min + bounds.y.max) / 2;
+    const cz = (bounds.z.min + bounds.z.max) / 2;
+    if (axis === 'x') {
+        capPlane.position.set(axisValue, cy, cz);
+    } else if (axis === 'y') {
+        capPlane.position.set(cx, axisValue, cz);
+    } else { // 'z'
+        capPlane.position.set(cx, cy, axisValue);
+    }
+    // Ориентация: локальная +Z плоскости смотрит вдоль -normal
+    capPlane.lookAt(
+        capPlane.position.x - plane.normal.x,
+        capPlane.position.y - plane.normal.y,
+        capPlane.position.z - plane.normal.z
+    );
 }
 
 function disposeGroup(group) {
@@ -182,7 +252,7 @@ function enableCutting() {
         y: new THREE.Plane(new THREE.Vector3(0, -1, 0), bounds.y.max),
         z: new THREE.Plane(new THREE.Vector3(0, 0, -1), bounds.z.max)
     };
-    const worldGeometries = [];
+    const worldGeometrySources = [];
     cutRefs.model.traverse(node => {
         if (!node.isMesh) return;
         if (!originalMaterials.has(node)) originalMaterials.set(node, node.material);
@@ -192,18 +262,28 @@ function enableCutting() {
             const wg = node.geometry.clone();
             node.updateWorldMatrix(true, false);
             wg.applyMatrix4(node.matrixWorld);
-            worldGeometries.push(wg);
+            // Сохраняем ссылку на оригинальный меш, чтобы потом синхронизировать
+            // видимость stencil-мешей с видимостью самой детали сборки.
+            worldGeometrySources.push({ geom: wg, node });
         }
     });
     const allPlanes = [cutObjects.clippingPlanes.x, cutObjects.clippingPlanes.y, cutObjects.clippingPlanes.z];
     ['x', 'y', 'z'].forEach((axis, index) => {
         const stencilGroup = new THREE.Group();
         stencilGroup.name = `stencil-${axis}`;
-        worldGeometries.forEach(geom => stencilGroup.add(createPlaneStencilGroup(geom, allPlanes[index], index + 1)));
+        worldGeometrySources.forEach(({ geom, node }) => {
+            const stencilPair = createPlaneStencilGroup(geom, allPlanes[index], index + 1);
+            stencilGroup.add(stencilPair);
+            if (!meshToStencilMeshes.has(node)) {
+                meshToStencilMeshes.set(node, []);
+                registeredMeshes.add(node);
+            }
+            meshToStencilMeshes.get(node).push(...stencilPair.children);
+        });
         cutRefs.scene.add(stencilGroup);
         cutObjects.stencilGroups.push(stencilGroup);
         const otherPlanes = allPlanes.filter((_, i) => i !== index);
-        const capPlane = createCapPlane(allPlanes[index], index + 1, otherPlanes);
+        const capPlane = createCapPlane(allPlanes[index], index + 1, otherPlanes, axis);
         capPlane.name = `cap-${axis}`;
         const capGroup = new THREE.Group();
         capGroup.add(capPlane);
@@ -212,6 +292,9 @@ function enableCutting() {
         cutObjects.capPlaneGroups.push(capGroup);
     });
     applyClippingPlanes();
+    // Первичная синхронизация видимости — на случай, если какие-то детали
+    // уже спрятаны на момент включения сечения.
+    syncPartVisibility();
 }
 
 function disableCutting() {
@@ -221,7 +304,57 @@ function disableCutting() {
     [...cutObjects.stencilGroups, ...cutObjects.capPlaneGroups].forEach(group => { cutRefs.scene.remove(group); disposeGroup(group); });
     cutObjects.stencilGroups = []; cutObjects.capPlanes = []; cutObjects.capPlaneGroups = [];
     cutObjects.clippingPlanes = { x: null, y: null, z: null };
+    registeredMeshes.clear();
     _store.setState('cutting3d.activeAxis', null);
+}
+
+// ------------------------------------------------------------
+// Синхронизация видимости: cap-плоскость рисуется только там, где
+// stencil-меши отметили срез. Stencil-меши живут отдельно от модели
+// (добавлены напрямую в scene), поэтому при скрытии детали сборки
+// нужно вручную прятать и её stencil-меши — иначе «заглушка»
+// останется висеть на месте исчезнувшей детали.
+// ------------------------------------------------------------
+
+/** Эффективная видимость узла с учётом видимости всех его предков. */
+function isEffectivelyVisible(node) {
+    let cur = node;
+    while (cur) {
+        if (cur.visible === false) return false;
+        cur = cur.parent;
+    }
+    return true;
+}
+
+/** Синхронизирует видимость stencil-мешей с видимостью деталей модели. */
+function syncPartVisibility() {
+    if (!_store.getState('cutting3d.isActive')) return;
+    registeredMeshes.forEach(node => {
+        const stencilMeshes = meshToStencilMeshes.get(node);
+        if (!stencilMeshes) return;
+        const visible = isEffectivelyVisible(node);
+        for (let i = 0; i < stencilMeshes.length; i++) {
+            stencilMeshes[i].visible = visible;
+        }
+    });
+}
+
+/** Запускает постоянный цикл синхронизации видимости через requestAnimationFrame. */
+function startVisibilitySync() {
+    if (_visSyncRAF !== null) return;
+    const tick = () => {
+        syncPartVisibility();
+        _visSyncRAF = requestAnimationFrame(tick);
+    };
+    tick();
+}
+
+/** Останавливает цикл синхронизации видимости. */
+function stopVisibilitySync() {
+    if (_visSyncRAF !== null) {
+        cancelAnimationFrame(_visSyncRAF);
+        _visSyncRAF = null;
+    }
 }
 
 function applyClippingPlanes() {
@@ -265,7 +398,7 @@ function applyClippingPlanes() {
         capPlane.visible = isOn;
 
         if (isOn) {
-            updateCapPlanePosition(capPlane, cutObjects.clippingPlanes[axis]);
+            updateCapPlanePosition(capPlane, cutObjects.clippingPlanes[axis], axis);
             // Cap обрезается плоскостями других включённых осей
             capPlane.material.clippingPlanes = activePlanes.filter(p => p !== cutObjects.clippingPlanes[axis]);
             capPlane.material.needsUpdate = true;
@@ -295,15 +428,31 @@ function createVisiblePlane(axis) {
     const axisValue = _store.getState('cutting3d.axisValues')[axis];
     if (!bounds[axis]) return;
 
-    // Размер плоскости — по габаритам модели + запас
+    // Размер плоскости — по габаритам модели, перпендикулярным оси сечения.
+    // PlaneGeometry по умолчанию лежит в плоскости XY (нормаль +Z).
+    // После поворота группы:
+    //   axis 'x' (rotation.y =  π/2): локальный X плоскости → мир Z, локальный Y → мир Y
+    //   axis 'y' (rotation.x = -π/2): локальный X плоскости → мир X, локальный Y → мир Z
+    //   axis 'z' (без поворота)     : локальный X плоскости → мир X, локальный Y → мир Y
     const box = new THREE.Box3().setFromObject(cutRefs.model);
     const size = new THREE.Vector3();
     box.getSize(size);
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const planeSize = maxDim * 1.1;
+
+    const MARGIN = 1.1; // +10% по каждому измерению, чтобы плоскость слегка выходила за модель
+    let planeWidth, planeHeight;
+    if (axis === 'x') {
+        planeWidth  = size.z * MARGIN; // локальный X → мир Z
+        planeHeight = size.y * MARGIN; // локальный Y → мир Y
+    } else if (axis === 'y') {
+        planeWidth  = size.x * MARGIN; // локальный X → мир X
+        planeHeight = size.z * MARGIN; // локальный Y → мир Z
+    } else { // 'z'
+        planeWidth  = size.x * MARGIN;
+        planeHeight = size.y * MARGIN;
+    }
 
     // Полупрозрачная заливка
-    const geometry = new THREE.PlaneGeometry(planeSize, planeSize);
+    const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
     const material = new THREE.MeshBasicMaterial({
         color: AXIS_COLORS[axis],
         transparent: true,
@@ -358,16 +507,12 @@ function createVisiblePlane(axis) {
 
 /** Удаляет видимую плоскость из сцены */
 function removeVisiblePlane() {
-    if (drag.planeGroup) {
-        cutRefs.scene.remove(drag.planeGroup);
-        drag.planeGroup.traverse(child => {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) child.material.dispose();
-        });
-        drag.planeGroup = null;
-        drag.planeMesh = null;
-        drag.planeEdges = null;
-    }
+    if (!drag.planeGroup) return;
+    cutRefs.scene.remove(drag.planeGroup);
+    disposeGroup(drag.planeGroup);
+    drag.planeGroup = null;
+    drag.planeMesh = null;
+    drag.planeEdges = null;
 }
 
 /**
@@ -403,7 +548,59 @@ function _getPointerCoords(event) {
     drag.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 }
 
+/**
+ * Временно отключает вращение и панорамирование камеры на время drag плоскости.
+ * Важно: НЕ отключаем controls.enabled целиком — иначе OrbitControls проигнорирует
+ * pointerdown и не добавит первый палец в свой внутренний Map, из-за чего при
+ * последующем pinch-zoom он будет думать, что активен только один указатель.
+ * Также сохраняем предыдущее состояние enableRotate/enablePan, чтобы вернуть
+ * именно его после завершения drag, а не переопределять чужую конфигурацию.
+ */
+function _setControlsForDrag(enabled) {
+    if (!cutRefs.controls) return;
+    if (enabled) {
+        if (drag._savedControlsState) {
+            cutRefs.controls.enableRotate = drag._savedControlsState.enableRotate;
+            cutRefs.controls.enablePan = drag._savedControlsState.enablePan;
+            drag._savedControlsState = null;
+        } else {
+            cutRefs.controls.enableRotate = true;
+            cutRefs.controls.enablePan = true;
+        }
+    } else {
+        if (!drag._savedControlsState) {
+            drag._savedControlsState = {
+                enableRotate: cutRefs.controls.enableRotate,
+                enablePan: cutRefs.controls.enablePan,
+            };
+        }
+        cutRefs.controls.enableRotate = false;
+        cutRefs.controls.enablePan = false;
+    }
+}
+
+/** Отменяет активный drag плоскости (без восстановления controls — это делает вызывающий код) */
+function _cancelDrag() {
+    drag.isDragging = false;
+    drag.helperPlane = null;
+    if (cutRefs.renderer?.domElement) cutRefs.renderer.domElement.style.cursor = '';
+    if (drag.planeMesh) drag.planeMesh.material.opacity = PLANE_OPACITY;
+}
+
 function handlePointerDown(event) {
+    // Регистрируем активный указатель
+    drag.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    // Multi-touch (pinch-zoom / pan двумя пальцами) — плоскость сечения
+    // не должна реагировать. Отдаём управление OrbitControls.
+    if (drag.activePointers.size > 1) {
+        if (drag.isDragging) {
+            _cancelDrag();
+            _setControlsForDrag(true);
+        }
+        return;
+    }
+
     if (!drag.planeMesh || !_store.getState('cutting3d.isActive') || !drag.isVisible) return;
 
     const activeAxis = _store.getState('cutting3d.activeAxis');
@@ -416,10 +613,12 @@ function handlePointerDown(event) {
     const hits = drag.raycaster.intersectObject(drag.planeMesh);
     if (hits.length === 0) return;
 
-    // Начинаем перетаскивание — блокируем OrbitControls до того,
-    // как он обработает событие (мы в capture-фазе)
-    event.stopImmediatePropagation();
+    // ВАЖНО: не вызываем stopImmediatePropagation — иначе OrbitControls не получит
+    // первый pointerdown и не добавит палец в свой внутренний Map, что сломает
+    // pinch-zoom при появлении второго пальца. Вместо этого точечно отключаем
+    // только вращение и pan — zoom остаётся доступным.
     event.preventDefault();
+    _setControlsForDrag(false);
 
     drag.isDragging = true;
     drag.axis = activeAxis;
@@ -432,9 +631,6 @@ function handlePointerDown(event) {
     drag.helperPlane = new THREE.Plane();
     drag.helperPlane.setFromNormalAndCoplanarPoint(cameraDir, hits[0].point);
 
-    // Блокируем OrbitControls
-    if (cutRefs.controls) cutRefs.controls.enabled = false;
-
     // Визуальный фидбэк
     if (drag.planeMesh) drag.planeMesh.material.opacity = PLANE_DRAG_OPACITY;
     cutRefs.renderer.domElement.style.cursor = 'grabbing';
@@ -443,12 +639,27 @@ function handlePointerDown(event) {
 function handlePointerMove(event) {
     if (!drag.planeMesh) return;
 
+    // Обновляем позицию зарегистрированного указателя
+    if (drag.activePointers.has(event.pointerId)) {
+        drag.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+
+    // Multi-touch — не двигаем плоскость, OrbitControls сам обработает pinch
+    if (drag.activePointers.size > 1) {
+        if (drag.isDragging) {
+            _cancelDrag();
+            _setControlsForDrag(true);
+        }
+        return;
+    }
+
     _getPointerCoords(event);
     drag.raycaster.setFromCamera(drag.pointer, cutRefs.camera);
 
     if (drag.isDragging) {
+        // НЕ stopPropagation — пусть OrbitControls получит move, но enableRotate=false
+        // блокирует вращение внутри rotateLeft().
         event.preventDefault();
-        event.stopPropagation();
 
         // Пересекаем луч с вспомогательной плоскостью
         const intersection = new THREE.Vector3();
@@ -471,7 +682,9 @@ function handlePointerMove(event) {
         applyClippingPlanes();
         updateVisiblePlanePosition(axis, newValue);
     } else {
-        // Hover-эффект (только если плоскость видима)
+        // Hover-эффект — только при отсутствии активных указателей
+        // (на touch-устройствах hover не нужен, а на десктопе mousedown уже запускает drag)
+        if (drag.activePointers.size > 0) return;
         if (!drag.planeMesh || !drag.isVisible) return;
         const hits = drag.raycaster.intersectObject(drag.planeMesh);
         if (hits.length > 0) {
@@ -484,18 +697,20 @@ function handlePointerMove(event) {
     }
 }
 
-function handlePointerUp() {
-    if (!drag.isDragging) return;
+function handlePointerUp(event) {
+    // Удаляем указатель из активных
+    if (event && event.pointerId !== undefined) {
+        drag.activePointers.delete(event.pointerId);
+    }
 
-    drag.isDragging = false;
-    drag.helperPlane = null;
+    if (drag.isDragging) {
+        _cancelDrag();
+    }
 
-    // Разблокируем OrbitControls
-    if (cutRefs.controls) cutRefs.controls.enabled = true;
-
-    // Сброс курсора и прозрачности
-    cutRefs.renderer.domElement.style.cursor = '';
-    if (drag.planeMesh) drag.planeMesh.material.opacity = PLANE_OPACITY;
+    // Если активных указателей не осталось — восстанавливаем состояние controls
+    if (drag.activePointers.size === 0) {
+        _setControlsForDrag(true);
+    }
 }
 
 /** Подключает обработчики pointer events к canvas */
@@ -504,18 +719,24 @@ function setupDragListeners() {
     if (!canvas) return;
 
     // PointerDown — на canvas в capture-фазе, чтобы перехватить событие
-    // до OrbitControls и предотвратить вращение камеры при клике на плоскость
+    // раньше OrbitControls (для регистрации указателя в нашем Map).
+    // ВНИМАНИЕ: stopImmediatePropagation больше не вызывается — иначе OrbitControls
+    // не получит первый палец и не сможет выполнить pinch-zoom.
     drag._ptrDown = (e) => handlePointerDown(e);
     canvas.addEventListener('pointerdown', drag._ptrDown, true);
 
     // PointerMove и PointerUp — на window для надёжности
     drag._ptrMove = (e) => handlePointerMove(e);
-    drag._ptrUp = () => handlePointerUp();
+    drag._ptrUp = (e) => handlePointerUp(e);
     window.addEventListener('pointermove', drag._ptrMove);
     window.addEventListener('pointerup', drag._ptrUp);
 
-    // Touch-совместимость: предотвращаем скролл при перетаскивании
-    drag._touchPrevent = (e) => { if (drag.isDragging) e.preventDefault(); };
+    // PointerCancel — касание прервано системой (входящий звонок, gesture conflict и т.п.)
+    drag._ptrCancel = (e) => handlePointerUp(e);
+    window.addEventListener('pointercancel', drag._ptrCancel);
+
+    // Touch-совместимость: предотвращаем скролл при перетаскивании плоскости
+    drag._touchPrevent = (e) => { if (drag.isDragging && drag.activePointers.size <= 1) e.preventDefault(); };
     canvas.addEventListener('touchmove', drag._touchPrevent, { passive: false });
 }
 
@@ -526,12 +747,22 @@ function cleanupDragListeners() {
     if (canvas && drag._ptrDown) canvas.removeEventListener('pointerdown', drag._ptrDown, true);
     if (drag._ptrMove) window.removeEventListener('pointermove', drag._ptrMove);
     if (drag._ptrUp) window.removeEventListener('pointerup', drag._ptrUp);
+    if (drag._ptrCancel) window.removeEventListener('pointercancel', drag._ptrCancel);
     if (canvas && drag._touchPrevent) canvas.removeEventListener('touchmove', drag._touchPrevent);
 
     drag._ptrDown = null;
     drag._ptrMove = null;
     drag._ptrUp = null;
+    drag._ptrCancel = null;
     drag._touchPrevent = null;
+
+    // Сбрасываем состояние drag и активные указатели
+    drag.activePointers.clear();
+    drag.isDragging = false;
+    drag.helperPlane = null;
+
+    // Восстанавливаем controls на случай, если плагин выключили во время drag
+    _setControlsForDrag(true);
 }
 
 // ============================================================
@@ -625,15 +856,18 @@ PluginManager.register({
         computeModelBounds();
         enableCutting();
         setupDragListeners();
+        startVisibilitySync();
 
-        window.ModelCut = { updateCapColor };
+        return () => {
+            stopVisibilitySync();
+        };
     },
 
     destroy() {
+        stopVisibilitySync();
         disableCutting();
         removeVisiblePlane();
         cleanupDragListeners();
-        window.ModelCut = null;
         _store = null;
     },
 

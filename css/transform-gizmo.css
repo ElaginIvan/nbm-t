@@ -1,0 +1,60 @@
+/* ==========================================================
+   Плагин: Перемещение / Поворот (transform-gizmo.js)
+   Использует базовые классы .plugin-pill* из components.css.
+   Здесь только специфичные для гизмо модификаторы:
+   цветовые состояния кнопок режимов.
+   ========================================================== */
+
+/* Панель — расширяет .plugin-pill */
+.gizmo-panel {
+    /* стили наследуются от .plugin-pill */
+}
+
+/* Кнопки — расширяют .plugin-pill-btn */
+.gizmo-btn {
+    /* стили наследуются от .plugin-pill-btn */
+}
+
+/* --- Кнопка перемещения — активная --- */
+.gizmo-btn[data-mode="translate"].active,
+#gizmo-move-btn.active {
+    color: #5b8def;
+    background: rgba(91, 141, 239, 0.3);
+    border-color: rgba(91, 141, 239, 0.6);
+    box-shadow: 0 2px 8px rgba(91, 141, 239, 0.25);
+}
+#gizmo-move-btn.active svg {
+    fill: #5b8def;
+}
+
+/* --- Кнопка поворота — активная --- */
+.gizmo-btn[data-mode="rotate"].active,
+#gizmo-rotate-btn.active {
+    color: #e0943a;
+    background: rgba(224, 148, 58, 0.3);
+    border-color: rgba(224, 148, 58, 0.6);
+    box-shadow: 0 2px 8px rgba(224, 148, 58, 0.25);
+}
+#gizmo-rotate-btn.active svg {
+    fill: #e0943a;
+}
+
+/* --- Кнопка траектории — активная --- */
+#gizmo-trail-btn.active {
+    color: #a29bfe;
+    background: rgba(162, 155, 254, 0.3);
+    border-color: rgba(162, 155, 254, 0.6);
+    box-shadow: 0 2px 8px rgba(162, 155, 254, 0.25);
+}
+#gizmo-trail-btn.active svg {
+    fill: #a29bfe;
+}
+
+/* --- Кнопка сброса --- */
+#gizmo-reset-btn:hover {
+    color: #e04040;
+    background: rgba(224, 64, 64, 0.15);
+}
+#gizmo-reset-btn:hover svg {
+    fill: #e04040;
+}

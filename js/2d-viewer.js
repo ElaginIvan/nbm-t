@@ -13,9 +13,6 @@
 import { store, getProjectId, escapeHtml } from './app.js';
 import PluginManager from './plugin-system.js';
 
-// Плагины 2D-модуля (импорт регистрирует их в PluginManager)
-// import './plugins/test.js';
-
 // ============================================================
 // ZOOM MANAGER
 // ============================================================
@@ -188,7 +185,10 @@ const DrawingLoader = {
         const drawings = [];
         const maxSheets = 10;
 
-        const basePath = `models/${projectId}/avif/${designation}.avif`;
+        const project = store.getState('project.data');
+        const drawingsDir = project.drawingsPath;
+
+        const basePath = `${drawingsDir}/${designation}.avif`;
         try {
             const response = await fetch(basePath, { method: 'HEAD' });
             if (response.ok) {
@@ -197,10 +197,10 @@ const DrawingLoader = {
         } catch (e) { /* не найден */ }
 
         for (let sheetNumber = 1; sheetNumber <= maxSheets; sheetNumber++) {
-            const pathWithSheet = `models/${projectId}/avif/${designation} Лист-${sheetNumber}.avif`;
+            const pathWithSheet = `${drawingsDir}/${designation} Лист-${sheetNumber}.avif`;
             try {
                 const response = await fetch(pathWithSheet, { method: 'HEAD' });
-                if (response.ok && response.status === 200) {
+                if (response.ok) {
                     drawings.push({ path: pathWithSheet, name: `${designation} Лист-${sheetNumber}.avif`, sheetNumber, isBase: false });
                 } else {
                     break;
@@ -210,10 +210,10 @@ const DrawingLoader = {
 
         if (drawings.length === 0) {
             for (let sheetNumber = 1; sheetNumber <= maxSheets; sheetNumber++) {
-                const pathNoSpace = `models/${projectId}/avif/${designation}Лист-${sheetNumber}.avif`;
+                const pathNoSpace = `${drawingsDir}/${designation}Лист-${sheetNumber}.avif`;
                 try {
                     const response = await fetch(pathNoSpace, { method: 'HEAD' });
-                    if (response.ok && response.status === 200) {
+                    if (response.ok) {
                         drawings.push({ path: pathNoSpace, name: `${designation}Лист-${sheetNumber}.avif`, sheetNumber, isBase: false });
                     } else {
                         break;
@@ -396,30 +396,28 @@ const InputHandlers = {
         e.preventDefault(); e.stopPropagation();
 
         const drawingContainer = document.getElementById('drawing-container');
-        const imageElement = document.getElementById('drawing-image');
-        if (!drawingContainer || !imageElement) return;
+        if (!drawingContainer) return;
 
         const delta = Math.sign(e.deltaY);
         const zoomFactor = delta > 0 ? 0.9 : 1.1;
         const rect = drawingContainer.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        const imageRect = imageElement.getBoundingClientRect();
-        const imageCenterX = imageRect.left - rect.left + imageRect.width / 2;
-        const imageCenterY = imageRect.top - rect.top + imageRect.height / 2;
-        const relativeX = mouseX - imageCenterX;
-        const relativeY = mouseY - imageCenterY;
 
         const oldZoom = zoomManager.zoomLevel;
-        zoomManager.zoomLevel *= zoomFactor;
-        zoomManager.zoomLevel = Math.max(zoomManager.minZoom, Math.min(zoomManager.maxZoom, zoomManager.zoomLevel));
+        const newZoom = Math.max(zoomManager.minZoom, Math.min(zoomManager.maxZoom, oldZoom * zoomFactor));
+        if (newZoom === oldZoom) return;
 
-        if (zoomManager.zoomLevel !== oldZoom) {
-            const scaleChange = zoomManager.zoomLevel / oldZoom;
-            zoomManager.imagePos.x -= relativeX * (1 - 1 / scaleChange);
-            zoomManager.imagePos.y -= relativeY * (1 - 1 / scaleChange);
-            zoomManager.applyZoom();
-        }
+        // Точка под курсором должна оставаться на месте после зума.
+        // При transform-origin: 0 0 и transform: translate(imagePos) scale(zoom):
+        //   screen_pos = imagePos + zoom * local_pos
+        // Чтобы точка P_local осталась под (mouseX, mouseY):
+        //   newImagePos = mouse - (newZoom/oldZoom) * (mouse - oldImagePos)
+        const k = newZoom / oldZoom;
+        zoomManager.imagePos.x = mouseX - k * (mouseX - zoomManager.imagePos.x);
+        zoomManager.imagePos.y = mouseY - k * (mouseY - zoomManager.imagePos.y);
+        zoomManager.zoomLevel = newZoom;
+        zoomManager.applyZoom();
     },
 
     handleTouchStart(e, zoomManager) {
@@ -448,25 +446,22 @@ const InputHandlers = {
             const currentDistance = this.getTouchDistance(e.touches[0], e.touches[1]);
             if (this.initialDistance) {
                 const scaleFactor = currentDistance / this.initialDistance;
+                const oldZoom = zoomManager.zoomLevel;
                 const newZoomLevel = Math.max(zoomManager.minZoom, Math.min(zoomManager.maxZoom, this.initialZoom * scaleFactor));
-                if (newZoomLevel !== zoomManager.zoomLevel) {
-                    const drawingContainer = document.getElementById('drawing-container');
-                    const imageElement = document.getElementById('drawing-image');
-                    if (drawingContainer && imageElement) {
-                        const rect = drawingContainer.getBoundingClientRect();
-                        const imageRect = imageElement.getBoundingClientRect();
-                        const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                        const relativeX = (centerX - rect.left) - (imageRect.left - rect.left + imageRect.width / 2);
-                        const relativeY = (centerY - rect.top) - (imageRect.top - rect.top + imageRect.height / 2);
-                        const oldZoom = zoomManager.zoomLevel;
-                        zoomManager.zoomLevel = newZoomLevel;
-                        const scaleChange = zoomManager.zoomLevel / oldZoom;
-                        zoomManager.imagePos.x -= relativeX * (1 - 1 / scaleChange);
-                        zoomManager.imagePos.y -= relativeY * (1 - 1 / scaleChange);
-                    }
-                    zoomManager.applyZoom();
-                }
+                if (newZoomLevel === oldZoom) return;
+
+                // Точка между пальцами должна оставаться на месте после зума.
+                // См. комментарий в handleWheel для формулы.
+                const drawingContainer = document.getElementById('drawing-container');
+                if (!drawingContainer) return;
+                const rect = drawingContainer.getBoundingClientRect();
+                const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+                const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+                const k = newZoomLevel / oldZoom;
+                zoomManager.imagePos.x = centerX - k * (centerX - zoomManager.imagePos.x);
+                zoomManager.imagePos.y = centerY - k * (centerY - zoomManager.imagePos.y);
+                zoomManager.zoomLevel = newZoomLevel;
+                zoomManager.applyZoom();
             }
         } else if (this.isDragging && e.touches.length === 1) {
             e.preventDefault(); e.stopPropagation();

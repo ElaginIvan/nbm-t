@@ -1,12 +1,14 @@
 {
     "projects": [
         {
-            "id": "tbo-7",
-            "name": "Контейнер ТБО-7",
+            "id": "tbo-8",
+            "name": "Контейнер ТБО-8",
             "description": "Контейнер для твердобытовых отходов.",
-            "previewImage": "models/tbo-7/preview.png",
-            "modelFile": "models/tbo-7/model.glb",
-            "specFile": "models/tbo-7/spec.csv"
+            "previewImage": "models/tbo-8/preview.png",
+            "modelFile": "models/tbo-8/model.glb",
+            "drawingsPath": "models/tbo-8/avif",
+            "specFile": "models/tbo-8/spec.csv",
+            "cuttingFile": "models/tbo-8/cutting.csv"
         },
         {
             "id": "tbo-4-k",
@@ -14,6 +16,7 @@
             "description": "Контейнер для твердобытовых отходов.",
             "previewImage": "models/tbo-4-k/preview.png",
             "modelFile": "models/tbo-4-k/model.glb",
+            "drawingsPath": "models/tbo-4-k/avif",
             "specFile": "models/tbo-4-k/spec.csv"
         },
         {
@@ -22,6 +25,7 @@
             "description": "Контейнер для твердобытовых отходов.",
             "previewImage": "models/tbo-6-k/preview.png",
             "modelFile": "models/tbo-6-k/model.glb",
+            "drawingsPath": "models/tbo-6-k/avif",
             "specFile": "models/tbo-6-k/spec.csv"
         },
         {
@@ -30,6 +34,7 @@
             "description": "Контейнер для твердобытовых отходов.",
             "previewImage": "models/tbo-8-k/preview.png",
             "modelFile": "models/tbo-8-k/model.glb",
+            "drawingsPath": "models/tbo-8-k/avif",
             "specFile": "models/tbo-8-k/spec.csv"
         },
         {
@@ -38,7 +43,9 @@
             "description": "Форма для изготовления фундамента опоры из бетона.",
             "previewImage": "models/fo-2/preview.png",
             "modelFile": "models/fo-2/model.glb",
-            "specFile": "models/fo-2/spec.csv"
+            "drawingsPath": "models/fo-2/avif",
+            "specFile": "models/fo-2/spec.csv",
+            "cuttingFile": "models/fo-2/cutting.csv"
         },
         {
             "id": "roof-70",
@@ -46,6 +53,7 @@
             "description": "Крыша длиной 70 метров.",
             "previewImage": "models/roof-70/preview.png",
             "modelFile": "models/roof-70/model.glb",
+            "drawingsPath": "models/roof-70/avif",
             "specFile": "models/roof-70/spec.csv"
         }
     ]

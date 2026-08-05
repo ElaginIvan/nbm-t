@@ -8,7 +8,7 @@
  * - Таблица спецификации (рендер, события, подписки)
  */
 
-import { store, loadCSV, findInCSV, escapeHtml, onReady, DataService, getProjectId } from './app.js';
+import { store, loadCSV, findInCSV, escapeHtml, DataService } from './app.js';
 
 // ============================================================
 // SPECIFICATION SERVICE
@@ -37,7 +37,8 @@ function _resetAllMeshes(structure) {
 const SpecificationService = {
     async loadCSVData(projectId) {
         if (!projectId) return [];
-        const csvPath = `models/${projectId}/spec.csv`;
+        const project = store.getState('project.data');
+        const csvPath = project.specFile;
         const csvData = await loadCSV(csvPath);
         store.setState('specification.csvData', csvData);
         return csvData;
@@ -327,6 +328,9 @@ const ProjectInfo = {
             projectData.setAttribute('data-model-path', project.modelFile);
             projectData.setAttribute('data-model-name', project.name);
             projectData.setAttribute('data-model-description', project.description);
+            if (project.cuttingFile) {
+                projectData.setAttribute('data-cutting-file', project.cuttingFile);
+            }
         }
     }
 };
@@ -375,4 +379,4 @@ export const ProjectPage = {
 // ЭКСПОРТ
 // ============================================================
 
-export { SpecificationService, renderSpecificationTable };
+export { SpecificationService };

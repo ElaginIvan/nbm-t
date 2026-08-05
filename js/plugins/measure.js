@@ -1604,6 +1604,11 @@ PluginManager.register({
 
         // Анимация
         _animate();
+
+        return () => {
+            window.removeEventListener('resize', _resizeHandler);
+            if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null; }
+        };
     },
 
     destroy() {

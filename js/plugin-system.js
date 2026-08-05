@@ -4,37 +4,79 @@
  *
  * Архитектура:
  * - PluginManager.register() — регистрация плагина (делается в файле плагина)
- * - PluginManager.registerModuleAPI() — модуль предоставляяет свой API
- * - PluginManager.initUI(container, moduleId) — создание сайдбара + контейнера панелей
+ * - PluginManager.registerModuleAPI() — модуль предоставляет свой API
+ * - PluginManager.initUI(container, moduleId) — создание док-панели + контейнера панелей
  *
- * UI:
- * - Справа тонкая полоска-триггер (6px)
- * - По клику/тапу выезжает панелька с иконками плагинов (50px)
- * - Каждый плагин togglable — можно включить несколько одновременно
- * - Панели стекаются снизу вверх, центрируются по горизонтали
+ * Управление плагинами:
+ * - localStorage ключи:
+ *     pluginEnabled  — { pluginId: true/false } — плагин включён/выключен (галочка снята = не загружается вообще)
+ *     pluginAutoStart — { pluginId: true/false } — автозапуск (запускается ли в фоне при загрузке приложения)
  *
- * Условная видимость:
- * - Плагин может объявить поле condition: (api) => boolean
- * - Если condition возвращает false — кнопка плагина не отображается в сайдбаре
- * - PluginManager автоматически переоценивает condition при modelLoaded
- * - Если активный плагин стал невидим (condition стал false) — он деактивируется
+ * UI (док):
+ * - Прозрачная горизонтальная панель-док внизу контейнера модуля
+ * - Кнопки плагинов: inactive / background / active
+ * - Активной может быть только одна иконка за раз
+ *
+ * PluginLifecycleManager:
+ * - Читает localStorage для определения: какие плагины включены, какие автозапускаются
+ * - При initUI — автоматически запускает плагины с autoStart в фоне (background)
+ * - Предоставляет методы для включения/выключения плагинов из настроек
  */
 
+import { escapeHtml } from './app.js';
+
 // ============================================================
-// ЛОКАЛЬНАЯ УТИЛИТА (без импорта из app.js, чтобы не создавать цикл зависимостей)
+// STORAGE HELPERS
 // ============================================================
 
-function _escapeHtml(str) {
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+const STORAGE_KEYS = {
+    enabled: 'pluginEnabled',
+    autoStart: 'pluginAutoStart'
+};
+
+function _loadStorageJSON(key) {
+    try {
+        return JSON.parse(localStorage.getItem(key) || '{}');
+    } catch { return {}; }
+}
+
+function _saveStorageJSON(key, data) {
+    try {
+        localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+        console.warn('[PluginSystem] Ошибка записи localStorage:', e);
+    }
+}
+
+function _isPluginEnabled(pluginId) {
+    const data = _loadStorageJSON(STORAGE_KEYS.enabled);
+    // По умолчанию все плагины включены (если нет записи)
+    return data[pluginId] !== false;
+}
+
+function _setPluginEnabled(pluginId, enabled) {
+    const data = _loadStorageJSON(STORAGE_KEYS.enabled);
+    data[pluginId] = enabled;
+    _saveStorageJSON(STORAGE_KEYS.enabled, data);
+}
+
+function _isPluginAutoStart(pluginId) {
+    const data = _loadStorageJSON(STORAGE_KEYS.autoStart);
+    // Если есть запись в localStorage — используем её
+    if (pluginId in data) return data[pluginId] === true;
+    // Fallback: читаем meta.autoStart из регистрации плагина
+    const plugin = _plugins.get(pluginId);
+    return plugin?.meta?.autoStart === true;
+}
+
+function _setPluginAutoStart(pluginId, autoStart) {
+    const data = _loadStorageJSON(STORAGE_KEYS.autoStart);
+    data[pluginId] = autoStart;
+    _saveStorageJSON(STORAGE_KEYS.autoStart, data);
 }
 
 // ============================================================
-// ВНУТРЕННИЕ СТИЛИ (инжектятся один раз)
+// ВНУТРЕННИЕ СТИЛИ
 // ============================================================
 
 const _styleId = 'plugin-system-styles';
@@ -44,61 +86,36 @@ function _injectStyles() {
     const style = document.createElement('style');
     style.id = _styleId;
     style.textContent = `
-/* --- Триггер (правая полоска) --- */
-.plugin-trigger {
+/* --- Док-панель (прозрачная, горизонтальная, внизу) --- */
+.plugin-dock {
     position: absolute;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 6px;
-    height: 100px;
-    background: var(--border-color);
-    opacity: 0.8;
-    border-radius: 3px 0 0 3px;
-    cursor: pointer;
-    z-index: 100;
-    transition: background 0.2s ease, width 0.2s ease;
-    touch-action: none;
-}
-.plugin-trigger:hover,
-.plugin-trigger.touching {
-    background: rgba(255, 255, 255, 0.22);
-    width: 8px;
-}
-
-/* --- Сайдбар (панелька с иконками) --- */
-.plugin-sidebar {
-    position: absolute;
-    right: -61px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 55px;
-    max-height: 70%;
-    overflow-y: auto;
-    background: var(--button-color, rgba(24, 24, 28, 0.96));
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: 12px 0 0 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-right: none;
-    padding: 8px 5px;
-    z-index: 101;
-    transition: right 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
-    flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 4px;
-    box-shadow: -2px 0 12px rgba(0, 0, 0, 0.4);
-}
-.plugin-sidebar.open {
-    right: 0;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    z-index: 100;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
 }
 
-/* --- Кнопки плагинов в сайдбаре --- */
-.plugin-sidebar-btn {
-    width: 40px;
-    height: 40px;
-    border: 1px solid transparent;
+.plugin-dock:empty,
+.plugin-dock.no-plugins {
+    display: none;
+}
+
+/* --- Кнопки плагинов в доке --- */
+.plugin-dock-btn {
+    pointer-events: auto;
+    width: 44px;
+    height: 44px;
+    border: none;
     background: transparent;
     border-radius: 50%;
     cursor: pointer;
@@ -106,35 +123,65 @@ function _injectStyles() {
     align-items: center;
     justify-content: center;
     color: var(--text-color, #aaa);
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
     flex-shrink: 0;
     position: relative;
+    opacity: 0.55;
 }
-.plugin-sidebar-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+.plugin-dock-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
     color: #fff;
+    opacity: 0.85;
 }
-.plugin-sidebar-btn.active {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.3);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+.plugin-dock-btn:active {
+    transform: scale(0.92);
 }
-.plugin-sidebar-btn svg {
-    width: 21px;
-    height: 21px;
-    fill: var(--text-color, #aaa);
+.plugin-dock-btn svg {
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+    pointer-events: none;
 }
-.plugin-sidebar-btn:hover svg,
-.plugin-sidebar-btn.active svg {
-    fill: #fff;
+
+.plugin-dock-btn.is-background {
+    opacity: 1;
+    color: var(--text-color, #fff);
 }
-/* Тултип */
-.plugin-sidebar-btn::after {
+.plugin-dock-btn.is-background::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.85;
+}
+
+.plugin-dock-btn.is-active {
+    opacity: 1;
+    color: var(--text-color, #fff);
+}
+.plugin-dock-btn.is-active::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 18px;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+}
+
+.plugin-dock-btn::before {
     content: attr(data-tooltip);
     position: absolute;
-    right: calc(100% + 8px);
-    top: 50%;
-    transform: translateY(-50%);
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.85);
     color: #ddd;
     font-size: 12px;
@@ -144,46 +191,84 @@ function _injectStyles() {
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.15s;
+    z-index: 10;
 }
-.plugin-sidebar-btn:hover::after {
+.plugin-dock-btn:hover::before {
     opacity: 1;
 }
 
-/* --- Контейнер панелей (стек снизу вверх, центрирование) --- */
+/* --- Контейнер панелей --- */
 .plugin-panels {
     position: absolute;
-    bottom: 20px;
+    bottom: 64px;
     left: 0;
     right: 0;
-    display: flex;
-    flex-direction: column-reverse;
-    align-items: center;
-    gap: 10px;
+    height: 0;
     z-index: 1000;
     pointer-events: none;
 }
 
-/* --- Отдельная панель плагина --- */
 .plugin-toolbar {
     pointer-events: auto;
     opacity: 0;
     visibility: hidden;
-    transform: translateY(10px);
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translate(-50%, 10px);
     transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
-    position: relative;
 }
 .plugin-toolbar.visible {
     opacity: 1;
     visibility: visible;
-    transform: translateY(0);
+    transform: translate(-50%, 0);
 }
 
+/* Мобильная адаптивность */
 @media (max-width: 768px) {
+    .plugin-dock {
+        bottom: 8px;
+        gap: 2px;
+        padding: 4px 8px;
+    }
+    .plugin-dock-btn {
+        width: 40px;
+        height: 40px;
+    }
+    .plugin-dock-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+    .plugin-dock-btn.is-active::after {
+        width: 16px;
+    }
     .plugin-panels {
-        bottom: 15px;
+        bottom: 56px;
+    }
+}
+
+.fullscreen-active .plugin-dock {
+    display: flex !important;
+    opacity: 1 !important;
+    z-index: 1100;
+}
+
+.fullscreen-active .plugin-panels {
+    z-index: 1100;
+}
+
+@media (max-width: 768px) and (hover: none) and (pointer: coarse) {
+    .fullscreen-active .plugin-dock {
+        bottom: 20px;
     }
     .fullscreen-active .plugin-panels {
-        bottom: 80px;
+        bottom: 76px;
+    }
+}
+
+@supports (height: 100dvh) {
+    .fullscreen-active .project-container {
+        height: 100dvh;
     }
 }
 `;
@@ -196,7 +281,7 @@ function _injectStyles() {
 
 const _plugins = new Map();
 const _moduleAPIs = new Map();
-const _moduleInstances = new Map(); // 'moduleId:pluginId' → { cleanup, panelUnmount, toolbarEl }
+const _moduleInstances = new Map(); // 'moduleId:pluginId' -> { cleanup, panelUnmount, toolbarEl }
 
 const PluginManager = {
 
@@ -236,9 +321,12 @@ const PluginManager = {
     },
 
     /**
-     * Создать UI (сайдбар + контейнер панелей) внутри контейнера модуля.
+     * Создать UI (док + контейнер панелей) внутри контейнера модуля.
+     * Автоматически запускает плагины с autoStart в фоне.
+     *
      * @param {HTMLElement} container
      * @param {string} moduleId
+     * @returns {Object} контроллер UI
      */
     initUI(container, moduleId) {
         _injectStyles();
@@ -246,40 +334,43 @@ const PluginManager = {
         const plugins = this.getPluginsForModule(moduleId);
         if (plugins.length === 0) return { destroy: () => {} };
 
-        // --- Триггер ---
-        const trigger = document.createElement('div');
-        trigger.className = 'plugin-trigger';
-        container.appendChild(trigger);
+        // --- Фильтруем: показываем только включённые плагины ---
+        const enabledPlugins = plugins.filter(p => _isPluginEnabled(p.id));
 
-        // --- Сайдбар ---
-        const sidebar = document.createElement('div');
-        sidebar.className = 'plugin-sidebar';
-        container.appendChild(sidebar);
+        // --- Док-панель ---
+        const dock = document.createElement('div');
+        dock.className = 'plugin-dock';
+        container.appendChild(dock);
 
-        // --- Контейнер для панелей (стек) ---
+        // --- Контейнер для панелей ---
         const panelsContainer = document.createElement('div');
         panelsContainer.className = 'plugin-panels';
         container.appendChild(panelsContainer);
 
         // Кнопки плагинов
         const buttons = new Map();
-        const activePlugins = new Set(); // Set активных pluginId
+        const runningPlugins = new Set();
+        let activePluginId = null;
 
-        plugins.forEach(plugin => {
+        // Создаём кнопки только для включённых плагинов
+        enabledPlugins.forEach(plugin => {
             const btn = document.createElement('button');
-            btn.className = 'plugin-sidebar-btn';
+            btn.type = 'button';
+            btn.className = 'plugin-dock-btn';
             btn.dataset.id = plugin.id;
             btn.dataset.tooltip = plugin.name;
             btn.setAttribute('aria-label', plugin.name);
-            btn.innerHTML = `<svg><use xlink:href="assets/icons/sprite.svg#${_escapeHtml(plugin.icon)}"></use></svg>`;
-            btn.addEventListener('click', () => _togglePlugin(plugin.id));
-            sidebar.appendChild(btn);
+            btn.innerHTML = `<svg><use xlink:href="assets/icons/sprite.svg#${escapeHtml(plugin.icon)}"></use></svg>`;
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                _togglePlugin(plugin.id);
+            });
+            dock.appendChild(btn);
             buttons.set(plugin.id, btn);
         });
 
-        // --- Условная видимость кнопок (через plugin.condition) ---
+        // --- Условная видимость кнопок ---
         function _shouldShowPlugin(plugin) {
-            // Если condition не задан — показываем всегда (обратная совместимость)
             if (typeof plugin.condition !== 'function') return true;
             const moduleAPI = PluginManager.getModuleAPI(moduleId);
             if (!moduleAPI) return false;
@@ -292,122 +383,130 @@ const PluginManager = {
         }
 
         function _refreshButtonsVisibility() {
-            for (const plugin of plugins) {
+            let anyVisible = false;
+            for (const plugin of enabledPlugins) {
                 const btn = buttons.get(plugin.id);
                 if (!btn) continue;
                 const shouldShow = _shouldShowPlugin(plugin);
                 btn.style.display = shouldShow ? '' : 'none';
-                // Если плагин стал невидим, но был активен — деактивируем
-                if (!shouldShow && activePlugins.has(plugin.id)) {
+                if (shouldShow) anyVisible = true;
+                if (!shouldShow && runningPlugins.has(plugin.id)) {
                     _deactivatePlugin(plugin.id);
                 }
             }
-            // Скрываем триггер целиком, если видимых плагинов нет
-            const anyVisible = plugins.some(p => _shouldShowPlugin(p));
-            trigger.style.display = anyVisible ? '' : 'none';
+            dock.classList.toggle('no-plugins', !anyVisible);
         }
 
-        // Первичная оценка (модель может быть уже загружена — например, при поздней инициализации)
         _refreshButtonsVisibility();
 
-        // Переоценка при каждой загрузке модели
-        const _modelLoadedHandler = () => _refreshButtonsVisibility();
+        // Переоценка при загрузке модели
+        const _modelLoadedHandler = () => {
+            _refreshButtonsVisibility();
+            // Автозапуск плагинов, которые стали видимыми после загрузки модели
+            _autoStartPendingPlugins();
+        };
         window.addEventListener('modelLoaded', _modelLoadedHandler);
 
-        // --- Логика сайдбара ---
-        let sidebarOpen = false;
-
-        function openSidebar() {
-            sidebarOpen = true;
-            sidebar.classList.add('open');
-        }
-
-        function closeSidebar() {
-            sidebarOpen = false;
-            sidebar.classList.remove('open');
-        }
-
-        trigger.addEventListener('click', (e) => {
-            e.stopPropagation();
-            sidebarOpen ? closeSidebar() : openSidebar();
-        });
-
-        trigger.addEventListener('touchstart', () => {
-            trigger.classList.add('touching');
-        }, { passive: true });
-        trigger.addEventListener('touchend', () => {
-            trigger.classList.remove('touching');
-        }, { passive: true });
-
-        document.addEventListener('click', (e) => {
-            if (sidebarOpen && !sidebar.contains(e.target) && !trigger.contains(e.target) && !panelsContainer.contains(e.target)) {
-                closeSidebar();
+        // --- Обновление состояния кнопок ---
+        function _updateButtonState(pluginId) {
+            const btn = buttons.get(pluginId);
+            if (!btn) return;
+            btn.classList.remove('is-active', 'is-background');
+            if (pluginId === activePluginId) {
+                btn.classList.add('is-active');
+            } else if (runningPlugins.has(pluginId)) {
+                btn.classList.add('is-background');
             }
-        });
+        }
 
-        // --- Множественная активация/деактивация ---
+        function _updateAllButtons() {
+            for (const id of buttons.keys()) _updateButtonState(id);
+        }
+
+        // --- Логика переключения ---
         function _togglePlugin(pluginId) {
-            if (activePlugins.has(pluginId)) {
+            if (pluginId === activePluginId) {
                 _deactivatePlugin(pluginId);
             } else {
                 _activatePlugin(pluginId);
             }
         }
 
-        function _activatePlugin(pluginId) {
-            if (activePlugins.has(pluginId)) return;
-
+        function _initPluginInstance(pluginId) {
             const plugin = _plugins.get(pluginId);
-            if (!plugin) return;
+            if (!plugin) return null;
 
             const instanceKey = `${moduleId}:${pluginId}`;
             const moduleAPI = PluginManager.getModuleAPI(moduleId);
 
-            // Вызываем init плагина
             let cleanup = null;
             if (typeof plugin.init === 'function') {
                 cleanup = plugin.init(moduleAPI);
             }
 
-            // Создаём отдельный элемент панели для этого плагина
             const toolbarEl = document.createElement('div');
             toolbarEl.className = 'plugin-toolbar';
             toolbarEl.dataset.pluginId = pluginId;
 
             if (plugin.panel?.className) {
-                toolbarEl.classList.add(...plugin.panel.className.split(' '));
+                toolbarEl.classList.add(...plugin.panel.className.split(' ').filter(Boolean));
             }
-
             if (plugin.panel?.html) {
                 toolbarEl.innerHTML = plugin.panel.html;
             }
-
             panelsContainer.appendChild(toolbarEl);
 
-            // Вызываем onMount
             if (typeof plugin.panel?.onMount === 'function') {
                 plugin.panel.onMount(toolbarEl, moduleAPI);
             }
 
-            // Анимация появления
-            requestAnimationFrame(() => {
-                toolbarEl.classList.add('visible');
-            });
-
-            buttons.get(pluginId)?.classList.add('active');
-            activePlugins.add(pluginId);
-
-            _moduleInstances.set(instanceKey, {
+            const instance = {
                 cleanup: typeof cleanup === 'function' ? cleanup : null,
                 panelUnmount: typeof plugin.panel?.onUnmount === 'function' ? plugin.panel.onUnmount : null,
                 toolbarEl,
-            });
+            };
+            _moduleInstances.set(instanceKey, instance);
+            runningPlugins.add(pluginId);
+            return instance;
+        }
 
-            closeSidebar();
+        function _activatePlugin(pluginId) {
+            const plugin = _plugins.get(pluginId);
+            if (!plugin) return;
+            if (pluginId === activePluginId) return;
+
+            if (!runningPlugins.has(pluginId)) {
+                _initPluginInstance(pluginId);
+            }
+
+            // Скрываем панель предыдущего активного
+            if (activePluginId && activePluginId !== pluginId) {
+                const prevInstance = _moduleInstances.get(`${moduleId}:${activePluginId}`);
+                if (prevInstance?.toolbarEl) {
+                    prevInstance.toolbarEl.classList.remove('visible');
+                }
+            }
+
+            // Показываем панель нового активного
+            const instance = _moduleInstances.get(`${moduleId}:${pluginId}`);
+            if (instance?.toolbarEl) {
+                requestAnimationFrame(() => {
+                    instance.toolbarEl.classList.add('visible');
+                });
+            }
+
+            activePluginId = pluginId;
+            _updateAllButtons();
+        }
+
+        function _activatePluginBackground(pluginId) {
+            if (runningPlugins.has(pluginId)) return;
+            _initPluginInstance(pluginId);
+            _updateButtonState(pluginId);
         }
 
         function _deactivatePlugin(pluginId) {
-            if (!activePlugins.has(pluginId)) return;
+            if (!runningPlugins.has(pluginId)) return;
 
             const plugin = _plugins.get(pluginId);
             const instanceKey = `${moduleId}:${pluginId}`;
@@ -418,7 +517,6 @@ const PluginManager = {
                 if (typeof instance.cleanup === 'function') instance.cleanup();
                 if (instance.toolbarEl) {
                     instance.toolbarEl.classList.remove('visible');
-                    // Удаляем после анимации
                     setTimeout(() => instance.toolbarEl?.remove(), 200);
                 }
                 _moduleInstances.delete(instanceKey);
@@ -426,38 +524,106 @@ const PluginManager = {
 
             if (typeof plugin?.destroy === 'function') plugin.destroy();
 
-            buttons.get(pluginId)?.classList.remove('active');
-            activePlugins.delete(pluginId);
+            runningPlugins.delete(pluginId);
+
+            if (activePluginId === pluginId) {
+                activePluginId = null;
+            }
+
+            _updateAllButtons();
         }
 
-        function activatePlugin(pluginId) {
-            _activatePlugin(pluginId);
-        }
-
-        function deactivatePlugin(pluginId) {
-            _deactivatePlugin(pluginId);
-        }
-
-        function deactivateAll() {
-            for (const id of [...activePlugins]) {
-                _deactivatePlugin(id);
+        function _autoStartPendingPlugins() {
+            for (const plugin of enabledPlugins) {
+                if (runningPlugins.has(plugin.id)) continue;
+                if (!_shouldShowPlugin(plugin)) continue;
+                if (!_isPluginAutoStart(plugin.id)) continue;
+                // Запускаем в фоне
+                _activatePluginBackground(plugin.id);
             }
         }
 
-        function isPluginActive(pluginId) {
-            return activePlugins.has(pluginId);
+        // Автозапуск при инициализации (для плагинов без condition)
+        _autoStartPendingPlugins();
+
+        function activatePlugin(id) { _activatePlugin(id); }
+        function deactivatePlugin(id) { _deactivatePlugin(id); }
+        function deactivateAll() {
+            for (const id of [...runningPlugins]) _deactivatePlugin(id);
+        }
+        function isPluginActive(id) { return runningPlugins.has(id); }
+        function getActivePluginIds() { return [...runningPlugins]; }
+        function getActivePluginId() { return activePluginId; }
+
+        /**
+         * Включить/выключить плагин (из настроек).
+         * Если выключаем — деактивируем и убираем кнопку.
+         * Если включаем — добавляем кнопку и обновляем видимость.
+         */
+        function togglePluginEnabled(pluginId, enabled) {
+            _setPluginEnabled(pluginId, enabled);
+
+            if (enabled) {
+                // Включаем: добавляем кнопку
+                const plugin = _plugins.get(pluginId);
+                if (!plugin || buttons.has(pluginId)) return;
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'plugin-dock-btn';
+                btn.dataset.id = pluginId;
+                btn.dataset.tooltip = plugin.name;
+                btn.setAttribute('aria-label', plugin.name);
+                btn.innerHTML = `<svg><use xlink:href="assets/icons/sprite.svg#${escapeHtml(plugin.icon)}"></use></svg>`;
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    _togglePlugin(pluginId);
+                });
+                dock.appendChild(btn);
+                buttons.set(pluginId, btn);
+
+                _refreshButtonsVisibility();
+                _autoStartPendingPlugins();
+            } else {
+                // Выключаем: деактивируем и убираем кнопку
+                if (runningPlugins.has(pluginId)) {
+                    _deactivatePlugin(pluginId);
+                }
+                const btn = buttons.get(pluginId);
+                if (btn) {
+                    btn.remove();
+                    buttons.delete(pluginId);
+                }
+                _refreshButtonsVisibility();
+            }
         }
 
-        function getActivePluginIds() {
-            return [...activePlugins];
+        /**
+         * Обновить автозапуск плагина.
+         */
+        function setPluginAutoStart(pluginId, autoStart) {
+            _setPluginAutoStart(pluginId, autoStart);
+        }
+
+        /**
+         * Перезагрузить список плагинов (вызвать после включения/выключения).
+         */
+        function reloadPlugins() {
+            // Сначала деактивируем все, чьи кнопки должны пропасть
+            for (const plugin of plugins) {
+                if (!_isPluginEnabled(plugin.id) && runningPlugins.has(plugin.id)) {
+                    _deactivatePlugin(plugin.id);
+                }
+            }
+            _refreshButtonsVisibility();
+            _autoStartPendingPlugins();
         }
 
         return {
             destroy: () => {
                 deactivateAll();
                 window.removeEventListener('modelLoaded', _modelLoadedHandler);
-                trigger.remove();
-                sidebar.remove();
+                dock.remove();
                 panelsContainer.remove();
             },
             activatePlugin,
@@ -465,8 +631,12 @@ const PluginManager = {
             deactivateAll,
             isPluginActive,
             getActivePluginIds,
+            getActivePluginId,
             getContainer: () => container,
             refreshVisibility: _refreshButtonsVisibility,
+            togglePluginEnabled,
+            setPluginAutoStart,
+            reloadPlugins,
         };
     },
 
@@ -477,6 +647,39 @@ const PluginManager = {
     get(id) {
         return _plugins.get(id) || null;
     },
+
+    /**
+     * Возвращает публичный API плагина (если он его предоставляет).
+     */
+    getPluginAPI(pluginId) {
+        const plugin = _plugins.get(pluginId);
+        return plugin?.getAPI ? plugin.getAPI() : null;
+    },
+
+    /**
+     * Делегирует per-frame обновление всем активным плагинам.
+     */
+    frameUpdate(now) {
+        for (const [key] of _moduleInstances) {
+            const pluginId = key.split(':').pop();
+            const plugin = _plugins.get(pluginId);
+            if (typeof plugin?.onFrame === 'function') {
+                plugin.onFrame(now);
+            }
+        }
+    },
+
+    // ============================================================
+    // STORAGE API (для использования в ui-managers.js)
+    // ============================================================
+
+    STORAGE_KEYS,
+
+    isPluginEnabled: _isPluginEnabled,
+    setPluginEnabled: _setPluginEnabled,
+    isPluginAutoStart: _isPluginAutoStart,
+    setPluginAutoStart: _setPluginAutoStart,
+    loadStorageJSON: _loadStorageJSON,
 };
 
 export default PluginManager;

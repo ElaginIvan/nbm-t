@@ -1,0 +1,202 @@
+/* ==========================================================
+   Плагин: Камера как фон (camera-background.js)
+   Видео элемент, позиционированный ПОД canvas Three.js.
+   Canvas имеет alpha: true, поэтому видео проступает сквозь него.
+   ========================================================== */
+
+/* --- Видео элемент (фон камеры) --- */
+.camera-bg-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+    /* Видео не перехватывает клики — они идут на canvas */
+    background: #000;
+}
+
+.camera-bg-video.camera-bg--active {
+    opacity: 1;
+}
+
+/* --- Замороженный кадр (камера остановлена) --- */
+.camera-bg-video.camera-bg--frozen {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* --- Canvas поверх видео --- */
+#model-container #viewer {
+    position: relative;
+    z-index: 1;
+}
+
+/* --- Кнопка сетки — активная (сетка видна) --- */
+#cam-grid-btn.active {
+    color: #4ecdc4;
+    background: rgba(78, 205, 196, 0.3);
+    border-color: rgba(78, 205, 196, 0.6);
+    box-shadow: 0 2px 8px rgba(78, 205, 196, 0.25);
+}
+#cam-grid-btn.active svg {
+    fill: #4ecdc4;
+}
+
+/* --- Кнопка тени — активная (тень включена) --- */
+#cam-shadow-btn.active {
+    color: #a29bfe;
+    background: rgba(162, 155, 254, 0.3);
+    border-color: rgba(162, 155, 254, 0.6);
+    box-shadow: 0 2px 8px rgba(162, 155, 254, 0.25);
+}
+#cam-shadow-btn.active svg {
+    fill: #a29bfe;
+}
+
+/* --- FOV слайдер --- */
+.cam-fov-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+}
+
+.cam-fov-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 90px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.15);
+    outline: none;
+    cursor: pointer;
+}
+
+.cam-fov-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.cam-fov-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.cam-fov-slider::-webkit-slider-thumb:active {
+    transform: scale(0.95);
+}
+
+.cam-fov-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+}
+
+.cam-fov-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-color);
+    min-width: 30px;
+    text-align: center;
+    opacity: 0.8;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* --- Кнопка фото (скриншот) --- */
+.cam-screenshot-icon {
+    width: 18px;
+    height: 18px;
+}
+
+/* --- Кнопка паузы камеры --- */
+.cam-pause-icon {
+    width: 18px;
+    height: 18px;
+}
+
+#cam-pause-btn.active {
+    color: #feca57;
+    background: rgba(254, 202, 87, 0.3);
+    border-color: rgba(254, 202, 87, 0.6);
+    box-shadow: 0 2px 8px rgba(254, 202, 87, 0.25);
+}
+#cam-pause-btn.active svg {
+    fill: #feca57;
+}
+
+#cam-pause-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+#cam-upload-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+#cam-upload-btn:active {
+    transform: scale(0.88);
+}
+
+#cam-screenshot-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+#cam-screenshot-btn:active {
+    transform: scale(0.88);
+}
+
+/* --- Вспышка при съёмке --- */
+.cam-capture-flash {
+    position: absolute;
+    inset: 0;
+    z-index: 2000;
+    pointer-events: none;
+    background: #fff;
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+}
+
+.cam-capture-flash.cam-capture-flash--fire {
+    opacity: 0.7;
+    transition: none;
+}
+
+/* --- Тост с ошибкой камеры --- */
+.cam-error-toast {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(220, 53, 69, 0.95);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    max-width: 90%;
+    text-align: center;
+    line-height: 1.4;
+}

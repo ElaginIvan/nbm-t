@@ -208,9 +208,38 @@
     transition: all 0.2s;
 }
 
-.part:hover {
-    opacity: 0.9;
-    transform: scale(1.02);
+/* Кликабельные детали в карте раскроя */
+.cutting-part {
+    cursor: pointer;
+    position: relative;
+}
+
+.cutting-part::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background-color: rgba(255, 255, 255, 0.5);
+    border-radius: 0 0 2px 2px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.cutting-part:hover::after {
+    opacity: 1;
+}
+
+.cutting-part.part--active {
+    background-color: #1a6fb5 !important;
+    z-index: 1;
+    position: relative;
+}
+
+.cutting-part.part--active::after {
+    opacity: 1;
+    background-color: #fff;
 }
 
 .cut-visual {

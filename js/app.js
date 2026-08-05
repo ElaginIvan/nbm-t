@@ -3,7 +3,7 @@
  *
  * Содержит:
  * - CSV утилиты (encoding detection, parsing, loading, finding)
- * - Общие утилиты (onReady, adjustEdgeColor, withModel, escapeHtml, getProjectId, deepClone)
+ * - Общие утилиты (onReady, withModel, escapeHtml, getProjectId, deepClone)
  * - Store (централизованное хранилище состояния)
  * - DataService (загрузка данных проектов с кэшированием)
  */
@@ -138,27 +138,6 @@ function onReady(fn) {
     } else {
         fn();
     }
-}
-
-/**
- * Корректирует цвет рёбер в зависимости от яркости
- */
-function adjustEdgeColor(color, percent) {
-    const num = parseInt(color.replace('#', ''), 16);
-    const R = (num >> 16) & 0xFF;
-    const G = (num >> 8) & 0x00FF;
-    const B = num & 0x0000FF;
-
-    const luminance = 0.299 * R + 0.587 * G + 0.114 * B;
-    const factor = luminance < 128 ? 1 + percent
-        : luminance > 128 ? 1 - percent
-        : 1;
-
-    const newR = Math.max(0, Math.min(255, Math.round(R * factor)));
-    const newG = Math.max(0, Math.min(255, Math.round(G * factor)));
-    const newB = Math.max(0, Math.min(255, Math.round(B * factor)));
-
-    return '#' + (0x1000000 + newR * 0x10000 + newG * 0x100 + newB).toString(16).slice(1);
 }
 
 /** Хелпер для traverse-операций над загруженной моделью */
@@ -440,4 +419,4 @@ export const DataService = {
 // ЭКСПОРТ
 // ============================================================
 
-export { adjustEdgeColor, withModel, onReady, getProjectId, escapeHtml, deepClone, loadCSV, findInCSV, parseCSV, decodeCSV, ENCODINGS };
+export { withModel, onReady, getProjectId, escapeHtml, deepClone, loadCSV, findInCSV, parseCSV, decodeCSV, ENCODINGS };

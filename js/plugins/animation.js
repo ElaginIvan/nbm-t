@@ -6,7 +6,7 @@
  * Получение анимаций — через событие modelLoaded (detail.animations).
  */
 
-import { AnimationMixer, LoopRepeat, LoopOnce, Clock } from 'three';
+import { AnimationMixer, LoopRepeat, LoopOnce, Timer } from 'three';
 import { store } from '../app.js';
 import PluginManager from '../plugin-system.js';
 
@@ -17,7 +17,8 @@ import PluginManager from '../plugin-system.js';
 let animationMixer = null;
 let animationClips = [];
 let animationActions = [];
-let clock = new Clock();
+let clock = new Timer();
+clock.connect(document);
 let isAnimating = false;
 let currentAnimationIndex = 0;
 let animationSpeed = 1.0;
@@ -34,13 +35,9 @@ let _modelLoadedHandler = null;
 
 function initAnimations(modelObject, animations) {
     if (!animations || animations.length === 0) {
-        console.log('Модель без анимаций');
         store.setState('model.animations', null);
         return false;
     }
-
-    console.log('Найдены анимации:', animations.length);
-    console.log('Названия:', animations.map(c => c.name));
 
     model = modelObject;
     animationClips = animations;
@@ -66,6 +63,7 @@ function initAnimations(modelObject, animations) {
 }
 
 function updateAnimation() {
+    clock.update();
     const delta = clock.getDelta();
     if (animationMixer && isAnimating) {
         animationMixer.update(delta * animationSpeed);
@@ -227,7 +225,9 @@ function _destroyAll() {
 
     animationClips = [];
     animationActions = [];
-    clock = new Clock();
+    clock.dispose();
+    clock = new Timer();
+    clock.connect(document);
     isAnimating = false;
     currentAnimationIndex = 0;
     animationSpeed = 1.0;
@@ -262,8 +262,6 @@ PluginManager.register({
         const existingAnims = api.store.getState('model.rawAnimations')
             || (api.model && api.model.animations);
 
-        console.log('Animation plugin init: model =', !!api.model, 'animations =', existingAnims);
-
         if (api.model && existingAnims && existingAnims.length > 0) {
             initAnimations(api.model, existingAnims);
             _animateLoop();
@@ -275,8 +273,6 @@ PluginManager.register({
 
             const m = e.detail.model;
             const anims = e.detail.animations;
-
-            console.log('Animation plugin: modelLoaded, animations =', anims);
 
             if (anims && anims.length > 0) {
                 initAnimations(m, anims);
@@ -290,6 +286,13 @@ PluginManager.register({
             }
         };
         window.addEventListener('modelLoaded', _modelLoadedHandler);
+
+        return () => {
+            if (_modelLoadedHandler) {
+                window.removeEventListener('modelLoaded', _modelLoadedHandler);
+                _modelLoadedHandler = null;
+            }
+        };
     },
 
     destroy() {

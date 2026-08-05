@@ -356,6 +356,10 @@ PluginManager.register({
     /** Деактивация — убрать маркер из сцены. */
     destroy() {
         if (_storeUnsubscribe) { _storeUnsubscribe(); _storeUnsubscribe = null; }
+        if (_modelLoadedHandler) {
+            window.removeEventListener('modelLoaded', _modelLoadedHandler);
+            _modelLoadedHandler = null;
+        }
         _hide();
         _api = null;
     },
