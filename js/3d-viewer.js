@@ -1,6 +1,6 @@
 /**
- * 3D Viewer Module — рендеринг 3D сцены
- * Подмодули: engine.js | Плагины: cutting-3d, measure, animation, center-of-mass, transform-gizmo, camera-background
+ * 3D Viewer Module — рендеринг 3D-сцены.
+ * Подмодули: engine.js. Плагины: cutting-3d, measure, animation, center-of-mass, transform-gizmo, camera-background, view-display, montage.
  */
 
 import * as THREE from 'three';
@@ -21,6 +21,7 @@ import './plugins/center-of-mass.js';
 import './plugins/transform-gizmo.js';
 import './plugins/camera-background.js';
 import './plugins/view-display.js';
+import './plugins/montage.js';
 
 function getModelPath() {
     return document.getElementById('project-data')?.getAttribute('data-model-path') || '';
@@ -45,9 +46,7 @@ let modelLoaded = false;
 let _cleanupResizeListener = null;
 let _dblClickHandler = null;
 
-// Рендер-цикл: activity-throttle — 60fps при работе с 3D, 15fps в простое,
-// RAF отменяется при сворачивании вкладки. События слушаются на #model-container,
-// чтобы скролл таблицы и клики по UI не держали 60fps.
+// Рендер-цикл: 60fps при работе с 3D, 1fps в простое. RAF отменяется при сворачивании вкладки.
 const ACTIVE_FPS = 60, IDLE_FPS = 1;
 const ACTIVE_MS = 1000 / ACTIVE_FPS, IDLE_MS = 1000 / IDLE_FPS;
 const IDLE_DELAY = 2000;
@@ -58,6 +57,10 @@ let _lastFrame = 0;
 let _lastActivity = 0;
 let _visibilityHandler = null;
 let _activityHandler = null;
+let _externalActivityHandler = null;
+
+const _showFpsOverlay = new URLSearchParams(window.location.search).has('fps')
+    || localStorage.getItem('debug-fps') === '1';
 
 function _attachActivity() {
     if (_activityHandler) return;
@@ -65,6 +68,13 @@ function _attachActivity() {
     if (!c) return;
     _activityHandler = () => { _lastActivity = performance.now(); };
     for (const evt of ACTIVITY_EVENTS) c.addEventListener(evt, _activityHandler, { passive: true });
+
+    // Внешний контракт активности: событие 'viewer-activity' на window.
+    _externalActivityHandler = () => {
+        _lastActivity = performance.now();
+        _ensureRenderLoop();
+    };
+    window.addEventListener('viewer-activity', _externalActivityHandler);
 }
 
 function _detachActivity() {
@@ -72,6 +82,10 @@ function _detachActivity() {
     const c = document.getElementById('model-container');
     if (c) for (const evt of ACTIVITY_EVENTS) c.removeEventListener(evt, _activityHandler);
     _activityHandler = null;
+    if (_externalActivityHandler) {
+        window.removeEventListener('viewer-activity', _externalActivityHandler);
+        _externalActivityHandler = null;
+    }
 }
 
 function getUISettings() {
@@ -87,7 +101,11 @@ function getMaterialSettings() {
 function applyModelColor(object, color) {
     const modelColor = new THREE.Color(color);
     object.traverse(child => {
-        if (child.isMesh && child.material) { child.material.color.copy(modelColor); child.material.dithering = true; }
+        if (!child.isMesh || !child.material) return;
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        for (const m of mats) {
+            if (m?.color) { m.color.copy(modelColor); m.dithering = true; }
+        }
     });
 }
 
@@ -140,12 +158,23 @@ function init() {
 
     setupLights(scene);
 
+    // Слушатели вьювера добавлены ДО initUI, чтобы не попасть в перехват canvas-событий плагинов.
+    renderer.domElement.addEventListener('pointerdown', _onCanvasPointerDown, { passive: true });
+    renderer.domElement.addEventListener('pointerup', _onCanvasPointerUp, { passive: true });
+    // Деталь сдвинута гизмо — снимаем цветовое выделение, пивот не трогаем (иначе камера перепрыгнет).
+    window.addEventListener('model-transformed', _deselect);
+
     _registerModuleAPI();
     const _uiController = PluginManager.initUI(container, '3d-viewer');
     window._pluginUIController = _uiController;
 
     _startRenderLoop();
-    _ensureFpsOverlay();
+    if (_showFpsOverlay) _ensureFpsOverlay();
+
+    // Выход из 2D-режима пробуждает остановленный рендер-цикл.
+    store.subscribe('ui.currentMode', (mode) => {
+        if (mode !== '2D') _ensureRenderLoop();
+    });
 
     loadModel(modelPath);
 }
@@ -154,6 +183,14 @@ function loadModel(modelPath) {
     showLoadingIndicator();
     new GLTFLoader().load(modelPath, gltf => {
         model = gltf.scene;
+        // Развязываем общие материалы: у каждого меша свой экземпляр,
+        // иначе выделение детали цветом перекрашивает все детали с общим материалом.
+        model.traverse(child => {
+            if (!child.isMesh || !child.material) return;
+            child.material = Array.isArray(child.material)
+                ? child.material.map(m => m?.clone())
+                : child.material.clone();
+        });
         const box = new THREE.Box3().setFromObject(model);
         const center = box.getCenter(new THREE.Vector3());
         model.position.set(-center.x, -center.y, -center.z);
@@ -166,10 +203,15 @@ function loadModel(modelPath) {
 
         const matSettings = getMaterialSettings();
         model.traverse(child => {
-            if (child.isMesh && child.material) { child.material.metalness = matSettings.metalness; child.material.roughness = matSettings.roughness; child.material.dithering = true; }
+            if (!child.isMesh || !child.material) return;
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            for (const m of mats) {
+                if (!m) continue;
+                m.metalness = matSettings.metalness;
+                m.roughness = matSettings.roughness;
+                m.dithering = true;
+            }
         });
-
-        // Рёбра, сетка, тени — создаёт плагин view-display (при autoStart)
 
         _frameAll();
 
@@ -186,7 +228,6 @@ function loadModel(modelPath) {
         store.setState('model.object', model);
         store.setState('model.rawAnimations', gltf.animations);
         store.setState('model.isLoaded', true);
-        store.setState('model.path', modelPath);
         modelLoaded = true;
         hideLoadingIndicator();
 
@@ -217,24 +258,97 @@ function _frameAll() {
     camera.lookAt(0, 0, 0);
     controls.target.set(0, 0, 0);
     controls.update();
+    _clearSelection();
+}
+
+// ============================================================
+// ЦЕНТР ВРАЩЕНИЯ ПО ДЕТАЛИ (клик, когда ни один плагин не активен):
+// клик по модели — деталь выделяется цветом и становится центром вращения,
+// клик мимо модели — выделение снимается, центр вращения НЕ сбрасывается.
+// Полный сброс центра — через «сброс вида» (_frameAll, двойной клик).
+// ============================================================
+
+const _raycaster = new THREE.Raycaster();
+const _ndc = new THREE.Vector2();
+const _SELECTION_COLOR = 0xff9500;
+let _selectedPart = null;
+let _savedColors = null;
+let _pointerDownPos = null;
+
+function _isViewerFree() {
+    return !window._pluginUIController?.getActivePluginId();
+}
+
+function _clearSelection() {
+    if (!_selectedPart) return;
+    for (const { mat, color } of _savedColors) mat.color.copy(color);
+    _selectedPart = null;
+    _savedColors = null;
+}
+
+/** Снять выделение, не двигая камеру. Пивот остаётся — кадр не дёргается. */
+function _deselect() {
+    _clearSelection();
+}
+
+function _selectPart(hit) {
+    _clearSelection();
+    const mats = Array.isArray(hit.object.material) ? hit.object.material : [hit.object.material];
+    _savedColors = mats.filter(Boolean).map(mat => ({ mat, color: mat.color.clone() }));
+    for (const { mat } of _savedColors) mat.color.set(_SELECTION_COLOR);
+    _selectedPart = hit.object;
+
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const dist = camera.position.distanceTo(hit.point);
+    controls.target.copy(camera.position).addScaledVector(dir, dist);
+}
+
+function _onCanvasPointerDown(e) {
+    _pointerDownPos = e.isPrimary ? { x: e.clientX, y: e.clientY } : null;
+}
+
+function _onCanvasPointerUp(e) {
+    if (!_pointerDownPos || !e.isPrimary) { _pointerDownPos = null; return; }
+    const dx = e.clientX - _pointerDownPos.x, dy = e.clientY - _pointerDownPos.y;
+    _pointerDownPos = null;
+    if (dx * dx + dy * dy > 25) return; // орбит/панорама, не клик
+    if (!model || !controls || !camera || !_isViewerFree()) return;
+
+    const rect = renderer.domElement.getBoundingClientRect();
+    _ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1,
+             -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    _raycaster.setFromCamera(_ndc, camera);
+    const hit = _raycaster.intersectObject(model, true).find(h => h.object.isMesh);
+    if (hit) _selectPart(hit); else _deselect();
 }
 
 function animate(now) {
-    _rafId = requestAnimationFrame(animate);
-
     const containerVisible = document.getElementById('model-container')?.classList.contains('active');
     const isIdle = !containerVisible || (now - _lastActivity) > IDLE_DELAY;
-    const targetMs = isIdle ? IDLE_MS : ACTIVE_MS;
 
-    if (now - _lastFrame < targetMs) return;
+    // 2D-режим — контейнер неактивен, цикл останавливается целиком.
+    if (!containerVisible) {
+        _rafId = null;
+        return;
+    }
+
+    _rafId = requestAnimationFrame(animate);
+
+    if (now - _lastFrame < (isIdle ? IDLE_MS : ACTIVE_MS)) return;
     _lastFrame = now;
 
     if (controls) controls.update();
-    // Делегируем per-frame обновления активным плагинам
-    PluginManager.frameUpdate(now);
     if (renderer && scene && camera) renderer.render(scene, camera);
 
     if (_fpsOverlay) _updateFpsOverlay(now, isIdle);
+}
+
+function _ensureRenderLoop() {
+    if (_rafId === null && !document.hidden) {
+        _lastFrame = 0;
+        _rafId = requestAnimationFrame(animate);
+    }
 }
 
 let _fpsOverlay = null;
@@ -280,7 +394,7 @@ function _startRenderLoop() {
             _lastFrame = 0;
             _resetFpsCounter();
             _attachActivity();
-            if (!_rafId) _rafId = requestAnimationFrame(animate);
+            _ensureRenderLoop();
         }
     };
     document.addEventListener('visibilitychange', _visibilityHandler);
@@ -325,6 +439,7 @@ window.onWindowResize = function () {
 
 export const ModelViewer = {
     init, getModel: () => model, getScene: () => scene, getCamera: () => camera,
+    getRenderer: () => renderer,
     getControls: () => controls, isModelLoaded: () => modelLoaded, resetView
 };
 

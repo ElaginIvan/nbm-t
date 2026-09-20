@@ -1,14 +1,11 @@
 /**
- * UI Managers Module
- * Менеджеры интерфейса страницы проекта
- *
- * Содержит:
- * - FullscreenManager (полноэкранный режим)
- * - ResizeHandler (изменение панели, переключение вкладок)
- * - SettingsManager (модальное окно настроек)
+ * UI Managers Module — менеджеры интерфейса страницы проекта.
+ * FullscreenManager: полноэкранный режим.
+ * ResizeHandler: изменение панели, переключение вкладок.
+ * SettingsManager: модальное окно настроек.
  */
 
-import { store, onReady, withModel, escapeHtml } from './app.js';
+import { store, onReady, escapeHtml } from './app.js';
 import { SpecificationService } from './specification.js';
 import PluginManager from './plugin-system.js';
 
@@ -61,7 +58,6 @@ export const FullscreenManager = {
         if (projectContainer) projectContainer.classList.add('fullscreen-wide');
 
         this.isFullscreen = true;
-        store.setState('ui.isFullscreen', true);
         this._updateButtonIcon();
 
         if (activeContainer === this.modelContainer && window.onWindowResize) {
@@ -92,7 +88,6 @@ export const FullscreenManager = {
         if (projectContainer) projectContainer.classList.remove('fullscreen-wide');
 
         this.isFullscreen = false;
-        store.setState('ui.isFullscreen', false);
         this._updateButtonIcon();
 
         if (activeContainer === this.modelContainer) {
@@ -146,7 +141,6 @@ export const FullscreenManager = {
 };
 
 window.FullscreenManager = FullscreenManager;
-window.exitFullscreen = () => FullscreenManager.exitFullscreen();
 
 // ============================================================
 // RESIZE HANDLER
@@ -167,6 +161,7 @@ export class ResizeHandler {
         this.startY = 0;
         this.startHeight = 0;
         this.minHeight = MIN_HEIGHT;
+        // maxHeight вычисляется на старте перетаскивания: фиксация в конструкторе устаревала после ресайза окна.
         this.maxHeight = window.innerHeight - MIN_HEIGHT;
 
         this.lastResizeCall = 0;
@@ -226,6 +221,7 @@ export class ResizeHandler {
         e.preventDefault();
         e.stopPropagation();
         this.isResizing = true;
+        this.maxHeight = window.innerHeight - MIN_HEIGHT;
         this.startY = e.clientY;
         this.startHeight = parseInt(getComputedStyle(this.infoPanel).height, 10);
         this.handle.classList.add('active');
@@ -235,6 +231,7 @@ export class ResizeHandler {
 
     _startResizeTouch(e) {
         this.isResizing = true;
+        this.maxHeight = window.innerHeight - MIN_HEIGHT;
         this.startY = e.touches[0].clientY;
         this.startHeight = parseInt(getComputedStyle(this.infoPanel).height, 10);
         this.handle.classList.add('active');
@@ -449,7 +446,6 @@ export const SettingsManager = {
                 this._applyTheme(e.target.value);
             });
         }
-
     },
 
     open() {
@@ -468,10 +464,8 @@ export const SettingsManager = {
 
     _loadSettings() {
         const settings = store.getState('ui.settings');
-
         const themeSelect = document.getElementById('theme-mode-select');
         if (themeSelect && settings?.themeMode) themeSelect.value = settings.themeMode;
-
     },
 
     _saveSetting(key, value) {
@@ -489,10 +483,6 @@ export const SettingsManager = {
         }
     },
 
-    // ============================================================
-    // ПЛАГИНЫ — одна таблица: имя | вкл/выкл | автозапуск
-    // ============================================================
-
     _buildPluginAutoList() {
         const table = document.getElementById('plugin-settings-table');
         if (!table) return;
@@ -504,10 +494,10 @@ export const SettingsManager = {
             { id: 'center-of-mass', name: 'Центр масс' },
             { id: 'animation', name: 'Анимация' },
             { id: 'transform-gizmo', name: 'Перемещение' },
-            { id: 'camera-background', name: 'Камера AR' }
+            { id: 'camera-background', name: 'Камера AR' },
+            { id: 'montage', name: 'Монтаж (отчёт)' }
         ];
 
-        // Заголовок таблицы
         const header = document.createElement('div');
         header.className = 'plugin-table-header';
         header.innerHTML = `
@@ -557,7 +547,6 @@ export const SettingsManager = {
                     cbAutostart.disabled = false;
                 }
 
-                // Обновляем док-панель
                 if (window._pluginUIController) {
                     window._pluginUIController.togglePluginEnabled(p.id, enabled);
                 }
@@ -575,9 +564,8 @@ export const SettingsManager = {
 // ИНИЦИАЛИЗАЦИЯ (страница проекта)
 // ============================================================
 
-// These are dynamically imported to avoid circular dependencies
-// and to keep modules loadable on index.html (where they aren't needed)
-
+// specification.js, cutting.js, 2d-viewer.js загружаются динамически,
+// чтобы избежать circular dependencies и не тянуть их в index.html
 onReady(() => {
     if (document.getElementById('project-data')) {
         import('./specification.js').then(({ ProjectPage }) => {

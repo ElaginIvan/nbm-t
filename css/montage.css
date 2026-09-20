@@ -1,0 +1,692 @@
+/**
+ * Плагин «Монтаж» — визуальный отчёт о ходе монтажа
+ * Стили: кисти-пилюля, большая панель сводки, атрибуты кисти (исполнитель/дата),
+ * диалоги (в т.ч. правка одной детали), тосты.
+ */
+
+/* ====================== ПИЛЮЛЯ-ТУЛБАР ====================== */
+
+.montage-pill {
+    gap: 4px;
+}
+
+/* Кисть «Смонтировано» в активном состоянии */
+.plugin-pill-btn.montage-btn--installed-on {
+    color: #2ecc71;
+    border-color: rgba(46, 204, 113, 0.55);
+    background: rgba(46, 204, 113, 0.14);
+}
+
+/* Кисть «Запланировано» в активном состоянии */
+.plugin-pill-btn.montage-btn--planned-on {
+    color: #ff9500;
+    border-color: rgba(255, 149, 0, 0.55);
+    background: rgba(255, 149, 0, 0.14);
+}
+
+/* Кисть «снять статус» в активном состоянии */
+.plugin-pill-btn.montage-btn--erase-on {
+    color: #ff5f5f;
+    border-color: rgba(255, 95, 95, 0.5);
+    background: rgba(255, 95, 95, 0.12);
+}
+
+/* ====================== БОЛЬШАЯ ПАНЕЛЬ (СВОДКА) ====================== */
+
+.montage-panel {
+    pointer-events: auto;
+    display: none;
+    position: absolute;
+    bottom: 64px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 360px;
+    max-width: calc(100vw - 20px);
+    max-height: min(78vh, 620px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--button-color, rgba(20, 22, 30, 0.92));
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+    padding: 14px 14px 10px;
+    color: var(--text-color, #eee);
+    z-index: 1001;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.montage-panel.visible {
+    display: block;
+}
+
+.montage-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.montage-panel__title {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+.montage-panel__close {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(128, 128, 128, 0.15);
+    color: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.montage-panel__close:hover {
+    background: rgba(128, 128, 128, 0.3);
+}
+
+.montage-panel__close svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+/* --- Прогресс --- */
+
+.montage-progress {
+    margin-bottom: 10px;
+}
+
+.montage-progress__bar {
+    height: 8px;
+    border-radius: 4px;
+    background: rgba(128, 128, 128, 0.22);
+    overflow: hidden;
+    margin-bottom: 5px;
+}
+
+.montage-progress__fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #1f9e55, #2ecc71);
+    transition: width 0.35s ease;
+}
+
+.montage-progress__label {
+    font-size: 12px;
+    opacity: 0.85;
+}
+
+/* --- Чипы статусов --- */
+
+.montage-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.montage-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 20px;
+    background: rgba(128, 128, 128, 0.14);
+    font-size: 11.5px;
+}
+
+.montage-chip i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(160, 160, 160, 0.75);
+    flex-shrink: 0;
+}
+
+.montage-chip--installed i {
+    background: #2ecc71;
+}
+
+.montage-chip--planned i {
+    background: #ff9500;
+}
+
+/* --- Атрибуты кисти: исполнитель и дата --- */
+
+.montage-attrs {
+    display: grid;
+    grid-template-columns: 1fr 124px;
+    gap: 7px;
+}
+
+.montage-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.montage-field > span {
+    font-size: 10.5px;
+    opacity: 0.6;
+}
+
+.montage-field input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(128, 128, 128, 0.3);
+    background: rgba(128, 128, 128, 0.1);
+    color: inherit;
+    font: inherit;
+    font-size: 12.5px;
+}
+
+.montage-field input:focus {
+    outline: none;
+    border-color: rgba(78, 205, 196, 0.65);
+}
+
+.montage-field input::placeholder {
+    color: inherit;
+    opacity: 0.4;
+}
+
+.montage-hint {
+    font-size: 10.5px;
+    opacity: 0.5;
+    margin-top: 5px;
+}
+
+/* нативный пикер даты: тёмный в тёмной теме, светлый в светлой */
+.montage-panel,
+.montage-modal__card {
+    color-scheme: dark;
+}
+
+[data-theme="light"] .montage-panel,
+[data-theme="light"] .montage-modal__card {
+    color-scheme: light;
+}
+
+/* --- Секции --- */
+
+.montage-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    opacity: 0.55;
+    margin: 10px 0 6px;
+}
+
+/* --- Режимы отображения --- */
+
+.montage-modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+}
+
+.montage-modes button {
+    padding: 7px 8px;
+    border-radius: 9px;
+    border: 1px solid rgba(128, 128, 128, 0.28);
+    background: rgba(128, 128, 128, 0.08);
+    color: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+}
+
+.montage-modes button:hover {
+    background: rgba(128, 128, 128, 0.18);
+}
+
+.montage-modes button.active {
+    border-color: rgba(78, 205, 196, 0.65);
+    background: rgba(78, 205, 196, 0.14);
+    color: #4ecdc4;
+    font-weight: 600;
+}
+
+/* --- Действия --- */
+
+.montage-actions {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.montage-action {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    border: 1px solid rgba(128, 128, 128, 0.28);
+    background: rgba(128, 128, 128, 0.08);
+    color: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.montage-action--wide {
+    width: 100%;
+}
+
+.montage-action:hover:not(:disabled) {
+    background: rgba(128, 128, 128, 0.18);
+}
+
+.montage-action:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.montage-action svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    color: inherit;
+    flex-shrink: 0;
+}
+
+.montage-action span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 230px;
+}
+
+/* --- Список по обозначениям --- */
+
+.montage-list {
+    max-height: 190px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid rgba(128, 128, 128, 0.18);
+    border-radius: 9px;
+    padding: 3px;
+}
+
+.montage-list__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 7px;
+    border-radius: 6px;
+}
+
+.montage-list__row:hover {
+    background: rgba(128, 128, 128, 0.1);
+}
+
+.montage-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: rgba(160, 160, 160, 0.5);
+    flex-shrink: 0;
+}
+
+.montage-dot--installed {
+    background: #2ecc71;
+}
+
+.montage-dot--planned {
+    background: #ff9500;
+}
+
+/* часть смонтирована, часть нет */
+.montage-dot--mixed {
+    background: linear-gradient(90deg, #2ecc71 50%, rgba(160, 160, 160, 0.5) 50%);
+}
+
+.montage-list__name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.montage-list__counts {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.montage-list__inst {
+    color: #2ecc71;
+    font-weight: 600;
+}
+
+.montage-list__plan {
+    color: #ff9500;
+    font-size: 11px;
+}
+
+.montage-list__date {
+    font-size: 11px;
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+}
+
+/* строка исполнителя в «По исполнителям» */
+.montage-dot--exec {
+    background: #4ecdc4;
+}
+
+/* Контекст одинаковых обозначений (сборка-родитель), напр. «Твердое тело1 · Рама-1» */
+.montage-list__ctx {
+    font-size: 11px;
+    opacity: 0.55;
+    white-space: nowrap;
+}
+
+.montage-list__empty {
+    padding: 12px;
+    text-align: center;
+    opacity: 0.6;
+}
+
+/* --- Футер --- */
+
+.montage-panel__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(128, 128, 128, 0.16);
+}
+
+.montage-reset {
+    border: none;
+    background: none;
+    color: #ff6b6b;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 0;
+    opacity: 0.85;
+}
+
+.montage-reset:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
+
+.montage-saved {
+    font-size: 11px;
+    opacity: 0.5;
+    white-space: nowrap;
+}
+
+/* ====================== ДИАЛОГ ====================== */
+
+.montage-modal {
+    pointer-events: auto;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1400;
+    padding: 16px;
+}
+
+.montage-modal__card {
+    width: 340px;
+    max-width: 100%;
+    background: var(--button-color, rgba(24, 26, 34, 0.98));
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+    padding: 16px;
+    color: var(--text-color, #eee);
+    font-size: 13px;
+}
+
+.montage-modal__title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.montage-modal__body p {
+    margin: 0 0 7px;
+}
+
+.montage-modal__warn {
+    color: #ffb14e;
+    font-size: 12px;
+}
+
+.montage-modal__hint {
+    opacity: 0.65;
+    font-size: 11.5px;
+}
+
+/* --- Форма правки одной детали (статус/исполнитель/дата) --- */
+
+.montage-form {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin: 10px 0 6px;
+}
+
+.montage-form__row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.montage-radio {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 9px;
+    border: 1px solid rgba(128, 128, 128, 0.32);
+    background: rgba(128, 128, 128, 0.08);
+    cursor: pointer;
+    font-size: 12px;
+    user-select: none;
+    transition: all 0.15s;
+}
+
+.montage-radio input {
+    margin: 0;
+    accent-color: #4ecdc4;
+    cursor: pointer;
+}
+
+.montage-radio:hover {
+    background: rgba(128, 128, 128, 0.18);
+}
+
+.montage-radio:has(input:checked) {
+    border-color: rgba(78, 205, 196, 0.65);
+    background: rgba(78, 205, 196, 0.14);
+}
+
+.montage-radio--planned:has(input:checked) {
+    border-color: rgba(255, 149, 0, 0.6);
+    background: rgba(255, 149, 0, 0.13);
+}
+
+.montage-radio--installed:has(input:checked) {
+    border-color: rgba(46, 204, 113, 0.6);
+    background: rgba(46, 204, 113, 0.13);
+}
+
+.montage-t--installed {
+    color: #2ecc71;
+}
+
+.montage-t--planned {
+    color: #ff9500;
+}
+
+.montage-modal__buttons {
+    display: flex;
+    gap: 7px;
+    justify-content: flex-end;
+    margin-top: 13px;
+    flex-wrap: wrap;
+}
+
+.montage-modal__btn {
+    padding: 8px 14px;
+    border-radius: 9px;
+    border: 1px solid rgba(128, 128, 128, 0.32);
+    background: rgba(128, 128, 128, 0.1);
+    color: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.montage-modal__btn:hover {
+    background: rgba(128, 128, 128, 0.22);
+}
+
+.montage-modal__btn--primary {
+    background: #4ecdc4;
+    border-color: #4ecdc4;
+    color: #10241f;
+    font-weight: 600;
+}
+
+.montage-modal__btn--primary:hover {
+    background: #62dcd4;
+}
+
+/* ====================== ТОСТ ====================== */
+
+.montage-toast {
+    position: absolute;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%) translateY(6px);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: min(90vw, 460px);
+    background: rgba(12, 13, 18, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+    padding: 9px 14px;
+    color: #eee;
+    font-size: 12.5px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    z-index: 1200;
+    pointer-events: auto;
+}
+
+.montage-toast.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+.montage-toast__text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.montage-toast__action {
+    border: 1px solid rgba(78, 205, 196, 0.6);
+    background: rgba(78, 205, 196, 0.12);
+    color: #4ecdc4;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+
+.montage-toast__action:hover {
+    background: rgba(78, 205, 196, 0.25);
+}
+
+/* ====================== МОБИЛЬНАЯ АДАПТАЦИЯ ====================== */
+
+@media (max-width: 768px) {
+    .montage-panel {
+        bottom: 56px;
+        width: calc(100vw - 16px);
+        padding: 12px 12px 8px;
+        border-radius: 14px;
+    }
+
+    .montage-toast {
+        bottom: 108px;
+        max-width: calc(100vw - 20px);
+    }
+}
+
+/* ====================== СВЕТЛАЯ ТЕМА ====================== */
+
+[data-theme="light"] .montage-panel,
+[data-theme="light"] .montage-modal__card {
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22);
+}
+
+[data-theme="light"] .montage-field input {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.18);
+}
+
+[data-theme="light"] .montage-field input:focus {
+    border-color: rgba(14, 141, 133, 0.65);
+}
+
+[data-theme="light"] .montage-radio {
+    border-color: rgba(0, 0, 0, 0.16);
+    background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .montage-radio:hover {
+    background: rgba(0, 0, 0, 0.07);
+}
+
+[data-theme="light"] .montage-modes button.active {
+    color: #0e8d85;
+    border-color: rgba(14, 141, 133, 0.5);
+    background: rgba(78, 205, 196, 0.16);
+}
+
+[data-theme="light"] .montage-toast {
+    background: rgba(250, 250, 252, 0.96);
+    color: #222;
+    border-color: rgba(0, 0, 0, 0.12);
+}

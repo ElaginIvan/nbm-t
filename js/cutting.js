@@ -1,25 +1,8 @@
 /**
- * Cutting Module
- * Раскрой материалов (самодостаточный модуль)
- *
- * Модуль читает данные напрямую из файла cutting.csv.
- * Путь к файлу берётся из projects.json (поле cuttingFile),
- * аналогично тому, как модуль 3D читает путь к модели.
- *
- * Содержит:
- * - LINEAR_CUTTING_MATERIALS — список форм материала для линейного раскроя
- * - CuttingService (загрузка данных из cutting.csv, выполнение раскроя)
- * - 3D-подсветка деталей (самодостаточная, не импортирует specification.js)
- * - 2D-чертежи через глобальный API window.DrawingViewer
- * - CuttingCalculator (UI: кнопка, визуализация результатов, клик по деталям)
- *
- * Формат cutting.csv (разделитель — точка с запятой):
- *   Обозначение;Описание;Материал;Длина;Ширина;Толщина;КОЛ.
- *
- * Фильтр: в раскрой попадают только строки, где первое слово
- * в колонке «Материал» входит в список LINEAR_CUTTING_MATERIALS
- * (фасонный / профильный прокат: труба, круг, арматура, швеллер, полоса).
- * Лист и другие материалы исключаются автоматически.
+ * Cutting Module — раскрой материалов.
+ * Самодостаточный модуль: читает cutting.csv (путь — из projects.json, поле cuttingFile).
+ * Фильтрует фасонный/профильный прокат, выполняет FFD-раскрой, рендерит карту раскроя.
+ * 3D-подсветка деталей и 2D-чертежи — через глобальные API window.ModelViewer / window.DrawingViewer.
  */
 
 import { store, escapeHtml, getProjectId, decodeCSV, parseCSV } from './app.js';
@@ -28,17 +11,7 @@ import { store, escapeHtml, getProjectId, decodeCSV, parseCSV } from './app.js';
 // КОНФИГУРАЦИЯ ФИЛЬТРА МАТЕРИАЛОВ
 // ============================================================
 
-/**
- * Список форм материалов, подлежащих линейному раскрою.
- * Первое слово в колонке «Материал» cutting.csv сравнивается
- * с этим списком (без учёта регистра).
- *
- * Фасонный / профильный прокат — всё, что режется в длину:
- *   - Труба  (прямоугольная, круглая, квадратная)
- *   - Круг   (круглый прокат / стержень)
- *   - Арматура (арматурный стержень)
- *   - Швеллер (П-образный профиль)
- */
+/** Формы материалов, подлежащие линейному раскрою (первое слово колонки «Материал»). */
 const LINEAR_CUTTING_MATERIALS = [
     'труба',
     'круг',
@@ -49,14 +22,7 @@ const LINEAR_CUTTING_MATERIALS = [
     'полоса',
 ];
 
-/**
- * Проверяет, подлежит ли данный материал линейному раскрою.
- * Извлекает первое слово из строки материала и сравнивает
- * со списком LINEAR_CUTTING_MATERIALS (без учёта регистра).
- *
- * @param {string} materialString — значение из колонки «Материал»
- * @returns {boolean}
- */
+/** Проверяет, входит ли первое слово материала в LINEAR_CUTTING_MATERIALS. */
 function isLinearCuttingMaterial(materialString) {
     if (!materialString || typeof materialString !== 'string') return false;
     const firstWord = materialString.trim().split(/\s+/)[0].toLowerCase();
@@ -64,13 +30,10 @@ function isLinearCuttingMaterial(materialString) {
 }
 
 // ============================================================
-// ВСПМОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // ============================================================
 
-/**
- * Очищает имя объекта от суффикса экземпляра (например «:2»).
- * Копия логики из specification.js для самодостаточности.
- */
+/** Очищает имя от суффикса экземпляра (например «:2»). Копия логики specification.js для самодостаточности. */
 function cleanDesignationName(name) {
     return name ? name.replace(/:\d+$/, '').trim() : '';
 }
@@ -79,15 +42,7 @@ function cleanDesignationName(name) {
 // ОБРАБОТКА ДАННЫХ CUTTING.CSV
 // ============================================================
 
-/**
- * Группирует данные из cutting.csv по типу материала для линейного раскроя.
- * Каждая группа содержит длину, количество и список обозначений (designations),
- * чтобы при клике на деталь в раскрое можно было найти её в 3D-модели
- * и показать чертёж.
- *
- * @param {Array<Object>} csvData — распарсенные строки cutting.csv
- * @returns {Object} { «Труба 60х40х3»: [{ length, quantity, designations }], ... }
- */
+/** Группирует данные cutting.csv по типу материала: каждая группа — длины с количеством и обозначениями. */
 function groupCuttingData(csvData) {
     const materialsMap = new Map();
 
@@ -146,26 +101,21 @@ function groupCuttingData(csvData) {
 }
 
 // ============================================================
-// 3D ПОДСВЕТКА ДЕТАЛЕЙ (самодостаточная реализация)
+// 3D ПОДСВЕТКА ДЕТАЛЕЙ (самодостаточная реализация, без импорта specification.js)
 // ============================================================
 
-/**
- * Состояние подсветки 3D-модели в контексте модуля раскроя.
- * Не зависит от specification.js — работает напрямую с Three.js моделью.
- * @private
- */
+/** Состояние подсветки 3D-модели. */
 const _highlight = {
-    /** Текущий выбранный список обозначений (null = ничего не выделено) */
     selectedDesignations: null,
-    /** Сохранённые оригинальные состояния мешей (uuid → { visible, emissiveHex }) */
     savedMeshStates: null
 };
 
-/**
- * Сохраняет текущие состояния видимости и emissive всех мешей модели.
- * Вызывается один раз перед первой подсветкой, чтобы иметь возможность
- * вернуть всё как было.
- */
+/** Уведомляет об изменении состава видимых деталей (для перерисовки карты теней). */
+function _notifyVisibilityChanged() {
+    window.dispatchEvent(new Event('model-visibility-changed'));
+}
+
+/** Сохраняет видимость и emissive всех мешей (для последующего восстановления). */
 function _saveMeshStates(model) {
     const states = new Map();
     model.traverse(child => {
@@ -180,9 +130,7 @@ function _saveMeshStates(model) {
     return states;
 }
 
-/**
- * Восстанавливает все меши модели к состоянию, сохранённому _saveMeshStates().
- */
+/** Восстанавливает меши к сохранённому состоянию. */
 function _restoreMeshStates(model) {
     if (!_highlight.savedMeshStates) return;
     model.traverse(child => {
@@ -198,14 +146,7 @@ function _restoreMeshStates(model) {
     });
 }
 
-/**
- * Находит все меши в модели, чьё имя (после очистки от суффиксов)
- * совпадает с указанным обозначением.
- *
- * @param {THREE.Object3D} model
- * @param {string} designation — обозначение детали (например «ФФО-2-01.002»)
- * @returns {Set<THREE.Mesh>}
- */
+/** Находит все меши модели, чьё имя совпадает с обозначением (после очистки суффиксов). */
 function _findMeshesByDesignation(model, designation) {
     const meshes = new Set();
     const cleanTarget = cleanDesignationName(designation);
@@ -223,12 +164,7 @@ function _findMeshesByDesignation(model, designation) {
     return meshes;
 }
 
-/**
- * Подсвечивает указанные детали в 3D-модели: показывает только их,
- * остальные скрывает. Детали, не найденные в модели, игнорируются.
- *
- * @param {string[]} designations — массив обозначений для подсветки
- */
+/** Показывает только указанные детали, остальные скрывает. */
 function highlightDesignationsInModel(designations) {
     const model = window.ModelViewer ? window.ModelViewer.getModel() : null;
     if (!model) return;
@@ -243,7 +179,7 @@ function highlightDesignationsInModel(designations) {
 
     if (!designations || designations.length === 0) {
         _highlight.selectedDesignations = null;
-        return;
+        return _notifyVisibilityChanged();
     }
 
     // Собираем меши всех указанных обозначений
@@ -255,7 +191,7 @@ function highlightDesignationsInModel(designations) {
 
     if (meshesToShow.size === 0) {
         _highlight.selectedDesignations = null;
-        return;
+        return _notifyVisibilityChanged();
     }
 
     // Скрываем все, кроме целевых
@@ -272,29 +208,23 @@ function highlightDesignationsInModel(designations) {
     });
 
     _highlight.selectedDesignations = designations;
+    _notifyVisibilityChanged();
 }
 
-/**
- * Сбрасывает подсветку: показывает все детали модели в исходном состоянии.
- */
+/** Сбрасывает подсветку: показывает все детали в исходном состоянии. */
 function resetModelHighlight() {
     const model = window.ModelViewer ? window.ModelViewer.getModel() : null;
     if (!model) return;
     _restoreMeshStates(model);
     _highlight.selectedDesignations = null;
+    _notifyVisibilityChanged();
 }
 
 // ============================================================
 // ОБРАБОТЧИК КЛИКА ПО ДЕТАЛИ В РАСКРОЕ
 // ============================================================
 
-/**
- * Обрабатывает клик по детали в карте раскроя.
- * - Если кликнута та же деталь — снимает подсветку (toggle).
- * - Если новая деталь — подсвечивает её в 3D, загружает чертёж в 2D.
- *
- * @param {string[]} designations — обозначения, привязанные к кликнутому сегменту
- */
+/** Обрабатывает клик по детали в раскрое: toggle выделения, подсветка в 3D, чертёж в 2D. */
 function handlePartClick(designations) {
     if (!designations || designations.length === 0) return;
 
@@ -326,10 +256,7 @@ function handlePartClick(designations) {
     }
 }
 
-/**
- * Подсвечивает (добавляет класс .part--active) все сегменты на карте раскроя,
- * которые содержат хотя бы одно из указанных обозначений.
- */
+/** Подсвечивает сегменты карты раскроя с теми же обозначениями. */
 function _highlightMatchingParts(designations) {
     _clearActivePartClass();
     document.querySelectorAll('.cutting-part[data-designations]').forEach(el => {
@@ -354,18 +281,9 @@ function _clearActivePartClass() {
 // ============================================================
 
 export const CuttingService = {
-    /**
-     * Загружает данные для раскроя из файла cutting.csv.
-     * Путь к файлу берётся из данных проекта (projects.json → поле cuttingFile).
-     * Не зависит от спецификации или 3D-модели.
-     *
-     * @returns {Object} сгруппированные данные для раскроя по типам материала
-     */
+    /** Загружает данные из cutting.csv (путь из projects.json). Не зависит от спецификации и 3D-модели. */
     async loadCuttingData() {
         try {
-            store.setState('cutting.isLoading', true);
-
-            // Путь к cutting.csv — из данных проекта (projects.json), как у модуля 3D
             const projectData = store.getState('project.data');
             const cuttingFile = projectData?.cuttingFile;
 
@@ -389,7 +307,6 @@ export const CuttingService = {
                 return {};
             }
 
-            // Фильтруем (только фасонный прокат) и группируем по типу материала
             const materialsData = groupCuttingData(csvData);
             store.setState('cutting.materialsData', materialsData);
 
@@ -397,25 +314,10 @@ export const CuttingService = {
         } catch (error) {
             console.error('Error loading cutting data:', error);
             return {};
-        } finally {
-            store.setState('cutting.isLoading', false);
         }
     },
 
-    /**
-     * Выполняет линейный раскрой по заготовкам.
-     * Алгоритм: First-Fit Decreasing (FFD) — сортирует детали по убыванию
-     * длины и размещает в первую подходящую заготовку.
-     *
-     * Каждый элемент в cutting plan несёт поле designation,
-     * чтобы визуализация могла сделать сегменты кликабельными.
-     *
-     * @param {Object} options
-     * @param {number} options.stockLength   — длина заготовки, мм
-     * @param {number} options.kerf          — ширина реза, мм
-     * @param {number} options.multiplicity  — кратность (кол-во изделий)
-     * @returns {Map} результаты раскроя по каждому типу материала
-     */
+    /** Линейный раскрой по алгоритму First-Fit Decreasing. Каждый элемент несёт designation для кликабельности сегментов. */
     async performCutting(options = {}) {
         const { stockLength = 6000, kerf = 0, multiplicity = 1 } = options;
 
@@ -445,20 +347,27 @@ export const CuttingService = {
             partsToCut.sort((a, b) => b.length - a.length);
 
             const cuttingPlan = [];
+            // Накопительные суммы занятости по каждому хлысту (O(P×S) вместо O(P×S×P)).
+            const stockUsed = [];   // сумма длин деталей хлыста
+            const stockCount = [];  // кол-во деталей в хлысте
             for (const part of partsToCut) {
                 let placed = false;
-                for (const stock of cuttingPlan) {
-                    const stockCount = stock.length;
-                    const usedLength = stockCount > 0
-                        ? stock.reduce((sum, p) => sum + p.length, 0) + (stockCount - 1) * kerf
-                        : 0;
-                    if (stockLength - usedLength >= part.length + (stockCount > 0 ? kerf : 0)) {
-                        stock.push(part);
+                for (let si = 0; si < cuttingPlan.length; si++) {
+                    const cnt = stockCount[si];
+                    const usedLength = cnt > 0 ? stockUsed[si] + (cnt - 1) * kerf : 0;
+                    if (stockLength - usedLength >= part.length + (cnt > 0 ? kerf : 0)) {
+                        cuttingPlan[si].push(part);
+                        stockUsed[si] += part.length;
+                        stockCount[si]++;
                         placed = true;
                         break;
                     }
                 }
-                if (!placed) cuttingPlan.push([part]);
+                if (!placed) {
+                    cuttingPlan.push([part]);
+                    stockUsed.push(part.length);
+                    stockCount.push(1);
+                }
             }
 
             // Группируем одинаковые карты раскроя
@@ -488,7 +397,6 @@ export const CuttingService = {
     clear() {
         store.setState('cutting.materialsData', {});
         store.setState('cutting.results', null);
-        store.setState('cutting.isLoading', false);
     }
 };
 
@@ -591,12 +499,15 @@ function visualizeAllResults(allResults, stockLength, kerf, multiplicity) {
                 usedLengthWithKerf += group.length * group.count;
                 totalNumberOfParts += group.count;
             });
-            usedLengthWithKerf += totalNumberOfParts * kerf;
+            // Единая kerf-математика с алгоритмом FFD: N деталей — (N-1) резов.
+            if (totalNumberOfParts > 0) {
+                usedLengthWithKerf += (totalNumberOfParts - 1) * kerf;
+            }
 
             groupedParts.forEach((group, groupIndex) => {
-                const groupTotalLength = group.length * group.count;
-                const groupCutsLength = group.count * kerf;
-                const groupWidth = (groupTotalLength + groupCutsLength) / stockLength * 100;
+                // Ширина сегмента: длина деталей группы + резы МЕЖДУ ними ((count-1) шт.).
+                const groupTotalLength = group.length * group.count + (group.count - 1) * kerf;
+                const groupWidth = groupTotalLength / stockLength * 100;
 
                 const partElement = document.createElement('div');
                 partElement.className = 'part cutting-part';
@@ -793,10 +704,7 @@ export function waitForProjectInitialization() {
     }, 500);
 }
 
-/**
- * Показывает сообщение об ошибке инициализации в контейнере результатов.
- * Вызывается, если initializeCuttingCalculator упал с исключением.
- */
+/** Показывает сообщение об ошибке инициализации в контейнере результатов. */
 function showCuttingInitError(error) {
     console.error('Error initializing cutting calculator:', error);
     const resultsContainer = document.getElementById('results-container');

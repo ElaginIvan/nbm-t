@@ -1,16 +1,12 @@
 /**
- * 2D Viewer Module
- * Просмотр 2D чертежей
- *
- * Содержит:
- * - ZoomManager (зум и панорамирование)
- * - UIManager (переключение 3D/2D, управление навигацией по листам)
- * - DrawingLoader (загрузка чертежей с кэшированием)
- * - InputHandlers (мышь, тач, колесо)
- * - DrawingViewer (главный модуль)
+ * 2D Viewer Module — просмотр 2D-чертежей.
+ * ZoomManager: зум и панорамирование.
+ * UIManager: переключение 3D/2D, навигация по листам.
+ * DrawingLoader: загрузка чертежей с кэшированием.
+ * InputHandlers: мышь, тач, колесо.
  */
 
-import { store, getProjectId, escapeHtml } from './app.js';
+import { store, escapeHtml } from './app.js';
 import PluginManager from './plugin-system.js';
 
 // ============================================================
@@ -163,13 +159,11 @@ const DrawingLoader = {
 
         if (drawings.length === 0) {
             this.showNoDrawingFound(cleanDesignation);
-            store.setState('drawing.currentPart', null);
             this.currentDrawings = null;
             UIManager.removeMultiDrawingControls();
             return false;
         }
 
-        store.setState('drawing.currentPart', designation);
         this.currentDrawings = { files: drawings, currentIndex: 0, designation: cleanDesignation };
         if (drawings.length === 1) {
             this.loadSingleDrawing(drawings[0]);
@@ -357,8 +351,8 @@ const InputHandlers = {
     initTouchHandlers(drawingViewer, zoomManager) {
         const drawingWrapper = document.querySelector('.drawing-wrapper');
         if (!drawingWrapper) return;
-        drawingWrapper.addEventListener('touchstart', (e) => this.handleTouchStart(e, zoomManager), { passive: true });
-        drawingWrapper.addEventListener('touchmove', (e) => this.handleTouchMove(e, zoomManager), { passive: true });
+        drawingWrapper.addEventListener('touchstart', (e) => this.handleTouchStart(e, zoomManager), { passive: false });
+        drawingWrapper.addEventListener('touchmove', (e) => this.handleTouchMove(e, zoomManager), { passive: false });
         drawingWrapper.addEventListener('touchend', (e) => this.handleTouchEnd(e, zoomManager));
     },
 
@@ -408,11 +402,7 @@ const InputHandlers = {
         const newZoom = Math.max(zoomManager.minZoom, Math.min(zoomManager.maxZoom, oldZoom * zoomFactor));
         if (newZoom === oldZoom) return;
 
-        // Точка под курсором должна оставаться на месте после зума.
-        // При transform-origin: 0 0 и transform: translate(imagePos) scale(zoom):
-        //   screen_pos = imagePos + zoom * local_pos
-        // Чтобы точка P_local осталась под (mouseX, mouseY):
-        //   newImagePos = mouse - (newZoom/oldZoom) * (mouse - oldImagePos)
+        // Точка под курсором остаётся на месте после зума.
         const k = newZoom / oldZoom;
         zoomManager.imagePos.x = mouseX - k * (mouseX - zoomManager.imagePos.x);
         zoomManager.imagePos.y = mouseY - k * (mouseY - zoomManager.imagePos.y);
@@ -450,8 +440,6 @@ const InputHandlers = {
                 const newZoomLevel = Math.max(zoomManager.minZoom, Math.min(zoomManager.maxZoom, this.initialZoom * scaleFactor));
                 if (newZoomLevel === oldZoom) return;
 
-                // Точка между пальцами должна оставаться на месте после зума.
-                // См. комментарий в handleWheel для формулы.
                 const drawingContainer = document.getElementById('drawing-container');
                 if (!drawingContainer) return;
                 const rect = drawingContainer.getBoundingClientRect();
@@ -582,22 +570,11 @@ const DrawingViewer = {
 
         const success = await DrawingLoader.loadDrawing(designation, projectId);
 
-        if (success && DrawingLoader.currentDrawings?.files.length > 1) {
-            UIManager.createMultiDrawingControls(DrawingLoader);
-        } else {
-            UIManager.removeMultiDrawingControls();
-        }
-
         ZoomManager.resetZoom();
         return success;
     },
-
 };
 
 window.DrawingViewer = DrawingViewer;
-
-// ============================================================
-// ЭКСПОРТ
-// ============================================================
 
 export { DrawingViewer, ZoomManager, DrawingLoader, UIManager };

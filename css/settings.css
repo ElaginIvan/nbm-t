@@ -407,15 +407,6 @@
     opacity: 0.5;
 }
 
-/* Значения рядом с инпутами */
-.setting-value {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    min-width: 50px;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-}
-
 /* Блокировка прокрутки фона при открытых настройках */
 body.settings-open {
     overflow: hidden;

@@ -1,62 +1,63 @@
 /**
- * Плагин: Анимация (3D)
- *
- * Адаптация model-animation.js → плагин plugin-system.js.
- * Логика анимации — из оригинала без изменений.
- * Получение анимаций — через событие modelLoaded (detail.animations).
+ * Плагин: Анимация (3D).
+ * Управление анимациями модели: play/pause/stop, выбор клипа, скорость, повтор.
+ * Анимации получаем через событие modelLoaded (detail.animations).
  */
 
-import { AnimationMixer, LoopRepeat, LoopOnce, Timer } from 'three';
-import { store } from '../app.js';
+import { AnimationMixer, LoopRepeat, LoopOnce } from 'three';
+import { escapeHtml } from '../app.js';
 import PluginManager from '../plugin-system.js';
 
 // ============================================================
-// СОСТОЯНИЕ МОДУЛЯ (из оригинала)
+// СОСТОЯНИЕ МОДУЛЯ
 // ============================================================
 
 let animationMixer = null;
 let animationClips = [];
 let animationActions = [];
-let clock = new Timer();
-clock.connect(document);
+
+/** Минимальный аналог THREE.Timer (появился в ядре только в r168; дельта клампится 100 мс). */
+function _createClock() {
+    return {
+        _prev: null,
+        _delta: 0,
+        update() {
+            const now = performance.now();
+            if (this._prev === null) this._prev = now;
+            this._delta = Math.min((now - this._prev) / 1000, 0.1);
+            this._prev = now;
+        },
+        getDelta() { return this._delta; },
+        dispose() { this._prev = null; this._delta = 0; }
+    };
+}
+let clock = _createClock();
 let isAnimating = false;
 let currentAnimationIndex = 0;
 let animationSpeed = 1.0;
 let isLooping = true;
 
-let model = null;
 let _animFrameId = null;
 let _boundEventHandlers = [];
 let _modelLoadedHandler = null;
 
 // ============================================================
-// ФУНКЦИИ АНИМАЦИИ (из оригинала, без export)
+// ФУНКЦИИ АНИМАЦИИ
 // ============================================================
 
 function initAnimations(modelObject, animations) {
     if (!animations || animations.length === 0) {
-        store.setState('model.animations', null);
         return false;
     }
 
-    model = modelObject;
     animationClips = animations;
-    animationMixer = new AnimationMixer(model);
+    animationMixer = new AnimationMixer(modelObject);
 
     animationClips.forEach(clip => {
         const action = animationMixer.clipAction(clip);
         action.setLoop(isLooping ? LoopRepeat : LoopOnce);
         action.clampWhenFinished = true;
         animationActions.push(action);
-    });
-
-    store.setState('model.animations', {
-        clips: animationClips.map(clip => ({ name: clip.name, duration: clip.duration })),
-        count: animationClips.length,
-        isPlaying: false,
-        currentIndex: 0,
-        speed: animationSpeed,
-        isLooping: isLooping
     });
 
     return true;
@@ -73,13 +74,11 @@ function updateAnimation() {
             if (currentAction && currentAction.time >= currentAction.getClip().duration) {
                 currentAction.paused = true;
                 isAnimating = false;
-                store.setState('model.animations.isPlaying', false);
                 updatePlayButton();
                 updateLoopButton();
             }
         }
     }
-    return delta;
 }
 
 function playAnimation() {
@@ -102,7 +101,8 @@ function playAnimation() {
     }
 
     isAnimating = true;
-    store.setState('model.animations.isPlaying', true);
+    clock.update();
+    _startAnimLoop();
     updatePlayButton();
     updateLoopButton();
 }
@@ -112,7 +112,7 @@ function pauseAnimation() {
     if (currentAction) currentAction.paused = true;
 
     isAnimating = false;
-    store.setState('model.animations.isPlaying', false);
+    _stopAnimLoop();
     updatePlayButton();
     updateLoopButton();
 }
@@ -125,7 +125,7 @@ function stopAnimation() {
     }
 
     isAnimating = false;
-    store.setState('model.animations.isPlaying', false);
+    _stopAnimLoop();
     updatePlayButton();
     updateLoopButton();
 }
@@ -136,7 +136,6 @@ function toggleLooping() {
         action.setLoop(isLooping ? LoopRepeat : LoopOnce);
         action.clampWhenFinished = true;
     });
-    store.setState('model.animations.isLooping', isLooping);
     updateLoopButton();
 }
 
@@ -149,14 +148,12 @@ function switchAnimation(index) {
 
     if (wasPlaying) playAnimation();
 
-    store.setState('model.animations.currentIndex', index);
     const selector = document.getElementById('animation-selector');
     if (selector) selector.value = index;
 }
 
 function setAnimationSpeed(speed) {
     animationSpeed = Math.max(0.1, Math.min(5.0, speed));
-    store.setState('model.animations.speed', animationSpeed);
 
     const speedSlider = document.getElementById('animation-speed');
     const speedValue = document.getElementById('animation-speed-value');
@@ -171,7 +168,7 @@ function toggleAnimation(e) {
 }
 
 // ============================================================
-// ОБНОВЛЕНИЕ UI (из оригинала, адаптировано под панель)
+// ОБНОВЛЕНИЕ UI
 // ============================================================
 
 function updatePlayButton() {
@@ -202,12 +199,22 @@ function updateLoopButton() {
 
 // ============================================================
 // СОБСТВЕННЫЙ ЦИКЛ АНИМАЦИИ
+// Цикл живёт ТОЛЬКО пока анимация играет. Пауза или финиш неповторяющегося
+// клипа останавливают его (isAnimating = false).
 // ============================================================
 
-function _animateLoop() {
+function _startAnimLoop() {
+    if (_animFrameId !== null) return;
     _animFrameId = requestAnimationFrame(_animateLoop);
-    if (document.hidden) return;
+}
+
+function _stopAnimLoop() {
+    if (_animFrameId !== null) { cancelAnimationFrame(_animFrameId); _animFrameId = null; }
+}
+
+function _animateLoop() {
     updateAnimation();
+    _animFrameId = isAnimating ? requestAnimationFrame(_animateLoop) : null;
 }
 
 // ============================================================
@@ -215,7 +222,7 @@ function _animateLoop() {
 // ============================================================
 
 function _destroyAll() {
-    if (_animFrameId) { cancelAnimationFrame(_animFrameId); _animFrameId = null; }
+    _stopAnimLoop();
 
     if (animationMixer) {
         animationActions.forEach(action => { try { action.stop(); } catch (_) {} });
@@ -226,13 +233,11 @@ function _destroyAll() {
     animationClips = [];
     animationActions = [];
     clock.dispose();
-    clock = new Timer();
-    clock.connect(document);
+    clock = _createClock();
     isAnimating = false;
     currentAnimationIndex = 0;
     animationSpeed = 1.0;
     isLooping = true;
-    model = null;
 }
 
 // ============================================================
@@ -245,11 +250,7 @@ PluginManager.register({
     icon: 'play',
     module: '3d-viewer',
 
-    /**
-     * Кнопка плагина показывается в сайдбаре только если в модели есть анимации.
-     * PluginManager сам вызывает condition при инициализации и при каждом
-     * событии modelLoaded (перезагрузка модели / загрузка другой модели).
-     */
+    /** Кнопка показывается только если в модели есть анимации. */
     condition: (api) => {
         if (!api || !api.store) return false;
         const anims = api.store.getState('model.rawAnimations');
@@ -257,17 +258,14 @@ PluginManager.register({
     },
 
     init(api) {
-        // Если модель уже загружена — инициализируем анимации сразу
-        // (init() вызывается при открытии панели, а модель могла быть загружена раньше)
         const existingAnims = api.store.getState('model.rawAnimations')
             || (api.model && api.model.animations);
 
         if (api.model && existingAnims && existingAnims.length > 0) {
             initAnimations(api.model, existingAnims);
-            _animateLoop();
+            // Цикл НЕ запускается здесь — только по playAnimation.
         }
 
-        // Слушаем перезагрузку модели (если загрузят другую)
         _modelLoadedHandler = (e) => {
             _destroyAll();
 
@@ -276,10 +274,8 @@ PluginManager.register({
 
             if (anims && anims.length > 0) {
                 initAnimations(m, anims);
-                _animateLoop();
             }
 
-            // Если панель открыта — обновить UI
             const toolbar = document.querySelector('.animation-panel');
             if (toolbar) {
                 _syncPanelUI(toolbar);
@@ -347,7 +343,6 @@ PluginManager.register({
         `,
 
         onMount(toolbar) {
-            // Привязка событий — те же ID что в оригинале, функции без изменений
             const toggleBtn = document.getElementById('animation-toggle-btn');
             const stopBtn = document.getElementById('animation-stop-btn');
             const loopBtn = document.getElementById('animation-loop-btn');
@@ -398,9 +393,10 @@ PluginManager.register({
                 _boundEventHandlers.push({ el: speedSlider, type: 'input', handler: h });
             }
 
-            // Клавиатура (из оригинала)
+            // Клавиатура: в фоновом режиме не перехватываем (isPluginPaused).
             const keyHandler = (e) => {
                 if (!animationMixer) return;
+                if (PluginManager.isPluginPaused('animation')) return;
                 const tag = e.target.tagName.toLowerCase();
                 if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
@@ -429,7 +425,6 @@ PluginManager.register({
             document.addEventListener('keydown', keyHandler);
             _boundEventHandlers.push({ el: document, type: 'keydown', handler: keyHandler });
 
-            // Синхронизируем UI с текущим состоянием
             _syncPanelUI(toolbar);
         },
 
@@ -437,7 +432,7 @@ PluginManager.register({
     }
 });
 
-/** Синхронизировать панель с текущим состоянием анимаций */
+/** Синхронизировать панель с текущим состоянием анимаций. */
 function _syncPanelUI(toolbar) {
     const extra = document.getElementById('anim-extra-controls');
     const noClips = document.getElementById('anim-no-clips');
@@ -446,16 +441,15 @@ function _syncPanelUI(toolbar) {
         if (extra) extra.style.display = '';
         if (noClips) noClips.style.display = 'none';
 
-        // Селектор
         const selector = document.getElementById('animation-selector');
         if (selector) {
+            // clip.name — внешние данные, экранируем (XSS-защита)
             selector.innerHTML = animationClips.map((clip, i) =>
-                `<option value="${i}" ${i === currentAnimationIndex ? 'selected' : ''}>${clip.name || 'Анимация ' + (i + 1)}</option>`
+                `<option value="${i}" ${i === currentAnimationIndex ? 'selected' : ''}>${escapeHtml(clip.name || 'Анимация ' + (i + 1))}</option>`
             ).join('');
             selector.style.display = animationClips.length > 1 ? '' : 'none';
         }
 
-        // Скорость
         const speedSlider = document.getElementById('animation-speed');
         const speedValue = document.getElementById('animation-speed-value');
         if (speedSlider) speedSlider.value = animationSpeed;

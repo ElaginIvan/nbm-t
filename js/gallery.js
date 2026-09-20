@@ -1,17 +1,9 @@
 /**
- * Gallery Module
- * Галерея проектов (страница index.html)
- *
- * Выделено из app.js — содержит:
- * - GalleryDomUtils — создание карточек проектов
- * - Gallery — загрузка, рендер и навигация по проектам
+ * Gallery Module — галерея проектов (страница index.html).
+ * Загружает проекты из projects.json и рендерит карточки.
  */
 
 import { DataService, escapeHtml } from './app.js';
-
-// ============================================================
-// DOM-утилиты галереи
-// ============================================================
 
 const GalleryDomUtils = {
     createProjectCardElement(project) {
@@ -40,10 +32,6 @@ const GalleryDomUtils = {
     }
 };
 
-// ============================================================
-// Gallery
-// ============================================================
-
 const Gallery = {
     async init() {
         try {
@@ -69,14 +57,9 @@ const Gallery = {
         }
     },
 
-    /**
-     * Привязка обработчиков клика к карточкам проектов.
-     */
     _bindCardEvents(container) {
         container.querySelectorAll('.model-card').forEach(card => {
-            card.addEventListener('click', (e) => {
-                this.openProject(card.dataset.id);
-            });
+            card.addEventListener('click', () => this.openProject(card.dataset.id));
         });
     },
 
@@ -85,7 +68,6 @@ const Gallery = {
         window.location.href = 'project.html';
     },
 
-    /** Общий рендер сообщений в галерее (пусто/ошибка/нет проектов) */
     _showMessage(container, icon, title, text) {
         container.innerHTML = `
             <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #666;">
@@ -99,7 +81,6 @@ const Gallery = {
     },
 };
 
-// Автоинициализация на странице галереи
 Gallery.init();
 
 export default Gallery;

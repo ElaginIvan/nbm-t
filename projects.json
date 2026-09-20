@@ -1,69 +1,78 @@
 {
-    "projects": [
-        {
-            "id": "tbo-8",
-            "name": "Контейнер ТБО-8",
-            "description": "Контейнер для твердобытовых отходов.",
-            "previewImage": "models/tbo-8/preview.png",
-            "modelFile": "models/tbo-8/model.glb",
-            "drawingsPath": "models/tbo-8/avif",
-            "specFile": "models/tbo-8/spec.csv",
-            "cuttingFile": "models/tbo-8/cutting.csv"
-        },
-        {
-            "id": "tbo-4-k",
-            "name": "Контейнер ТБО-4-К",
-            "description": "Контейнер для твердобытовых отходов.",
-            "previewImage": "models/tbo-4-k/preview.png",
-            "modelFile": "models/tbo-4-k/model.glb",
-            "drawingsPath": "models/tbo-4-k/avif",
-            "specFile": "models/tbo-4-k/spec.csv"
-        },
-        {
-            "id": "tbo-6-k",
-            "name": "Контейнер ТБО-6-К",
-            "description": "Контейнер для твердобытовых отходов.",
-            "previewImage": "models/tbo-6-k/preview.png",
-            "modelFile": "models/tbo-6-k/model.glb",
-            "drawingsPath": "models/tbo-6-k/avif",
-            "specFile": "models/tbo-6-k/spec.csv"
-        },
-        {
-            "id": "tbo-8-k",
-            "name": "Контейнер ТБО-8-К",
-            "description": "Контейнер для твердобытовых отходов.",
-            "previewImage": "models/tbo-8-k/preview.png",
-            "modelFile": "models/tbo-8-k/model.glb",
-            "drawingsPath": "models/tbo-8-k/avif",
-            "specFile": "models/tbo-8-k/spec.csv"
-        },
-        {
-            "id": "fo-2",
-            "name": "Форма ФО-2",
-            "description": "Форма для изготовления фундамента опоры из бетона.",
-            "previewImage": "models/fo-2/preview.png",
-            "modelFile": "models/fo-2/model.glb",
-            "drawingsPath": "models/fo-2/avif",
-            "specFile": "models/fo-2/spec.csv",
-            "cuttingFile": "models/fo-2/cutting.csv"
-        },
-        {
-            "id": "roof-70",
-            "name": "Крыша L=70",
-            "description": "Крыша длиной 70 метров.",
-            "previewImage": "models/roof-70/preview.png",
-            "modelFile": "models/roof-70/model.glb",
-            "drawingsPath": "models/roof-70/avif",
-            "specFile": "models/roof-70/spec.csv"
-        },
-                {
-            "id": "psl-6",
-            "name": "Площадка с лестницей",
-            "description": "Площадка с лестницей L=6 метров.",
-            "previewImage": "models/psl-6/preview.png",
-            "modelFile": "models/psl-6/model.glb",
-            "drawingsPath": "models/rpsl-6/avif",
-            "specFile": "models/psl-6/spec.csv"
-        }
-    ]
+  "projects": [
+    {
+      "id": "tbo-8",
+      "name": "Контейнер ТБО-8",
+      "description": "Контейнер для твердобытовых отходов.",
+      "previewImage": "models/tbo-8/preview.png",
+      "modelFile": "models/tbo-8/model.glb",
+      "drawingsPath": "models/tbo-8/avif",
+      "specFile": "models/tbo-8/spec.csv",
+      "cuttingFile": "models/tbo-8/cutting.csv"
+    },
+    {
+      "id": "tbo-4-k",
+      "name": "Контейнер ТБО-4-К",
+      "description": "Контейнер для твердобытовых отходов.",
+      "previewImage": "models/tbo-4-k/preview.png",
+      "modelFile": "models/tbo-4-k/model.glb",
+      "drawingsPath": "models/tbo-4-k/avif",
+      "specFile": "models/tbo-4-k/spec.csv"
+    },
+    {
+      "id": "tbo-6-k",
+      "name": "Контейнер ТБО-6-К",
+      "description": "Контейнер для твердобытовых отходов.",
+      "previewImage": "models/tbo-6-k/preview.png",
+      "modelFile": "models/tbo-6-k/model.glb",
+      "drawingsPath": "models/tbo-6-k/avif",
+      "specFile": "models/tbo-6-k/spec.csv"
+    },
+    {
+      "id": "tbo-8-k",
+      "name": "Контейнер ТБО-8-К",
+      "description": "Контейнер для твердобытовых отходов.",
+      "previewImage": "models/tbo-8-k/preview.png",
+      "modelFile": "models/tbo-8-k/model.glb",
+      "drawingsPath": "models/tbo-8-k/avif",
+      "specFile": "models/tbo-8-k/spec.csv"
+    },
+    {
+      "id": "fo-2",
+      "name": "Форма ФО-2",
+      "description": "Форма для изготовления фундамента опоры из бетона.",
+      "previewImage": "models/fo-2/preview.png",
+      "modelFile": "models/fo-2/model.glb",
+      "drawingsPath": "models/fo-2/avif",
+      "specFile": "models/fo-2/spec.csv",
+      "cuttingFile": "models/fo-2/cutting.csv"
+    },
+    {
+      "id": "roof-70",
+      "name": "Крыша L=70",
+      "description": "Крыша длиной 70 метров.",
+      "previewImage": "models/roof-70/preview.png",
+      "modelFile": "models/roof-70/model.glb",
+      "drawingsPath": "models/roof-70/avif",
+      "specFile": "models/roof-70/spec.csv"
+    },
+    {
+      "id": "psl-6",
+      "name": "Площадка с лестницей",
+      "description": "Площадка с лестницей L=6 метров.",
+      "previewImage": "models/psl-6/preview.png",
+      "modelFile": "models/psl-6/model.glb",
+      "drawingsPath": "models/psl-6/avif",
+      "specFile": "models/psl-6/spec.csv"
+    },
+    {
+      "id": "angar",
+      "name": "Мастерская",
+      "description": "Мастерская по обслуживанию сельхозтехники.",
+      "previewImage": "models/angar/preview.png",
+      "modelFile": "models/angar/model.glb",
+      "drawingsPath": "models/angar/avif",
+      "specFile": "models/angar/spec.csv"
+    }
+  ]
 }

@@ -421,6 +421,7 @@
     background: transparent;
     pointer-events: none;
     /* Пропускаем клики через панель */
+    padding: var(--spacing-0) var(--spacing-md);
 }
 
 .control-buttons .back-button,
@@ -438,10 +439,6 @@
 
 
 /* ====================== ОСНОВНЫЕ СТИЛИ КНОПОК ====================== */
-.control-buttons {
-    padding: var(--spacing-0) var(--spacing-md);
-}
-
 .back-button,
 .expand-button,
 .toggle-3d-2d-button,
@@ -485,19 +482,12 @@
 }
 
 /* ====================== АДАПТИВНОСТЬ ====================== */
+/* .container и .models-grid для мобильных перенесены в gallery.css:
+   там же их базовые правила, иначе каскад (gallery импортируется позже)
+   перебивает мобильные переопределения */
 @media (max-width: 768px) {
-    .container {
-        padding: var(--spacing-lg) var(--spacing-md);
-    }
-
     .control-buttons {
         top: var(--spacing-sm);
-    }
-
-
-    .models-grid {
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: var(--spacing-lg);
     }
 
     #model-container,
@@ -635,27 +625,10 @@
     align-items: center;
     justify-content: center;
     transition: var(--transition);
-    z-index: 100;
-    /* Увеличиваем z-index! */
+/* Увеличиваем z-index! */
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
 }
-
-/* .view-toggle-button svg {
-    height: 21px;
-    width: 21px;
-    fill: var(--text-color);
-} */
-
-/* Адаптивность для мобильных */
-/* @media (hover: none) and (pointer: coarse) {
-    .resize-handle {
-        height: 25px;
-    }
-
-    .view-toggle-button {
-        height: 44px;
-        width: 44px;
-    }
-} */
+/* Закомментированный блок остатков рефакторинга (.view-toggle-button svg,
+   @media hover:none) удалён */

@@ -115,3 +115,18 @@
         align-items: baseline;
     }
 }
+
+/* ====================== АДАПТИВНОСТЬ ====================== */
+/* Перенесено из components.css: базовые правила .container/.models-grid
+   объявлены в этом файле, и при равной специфичности каскад (gallery.css
+   импортируется позже components.css) перебивал мобильные переопределения */
+@media (max-width: 768px) {
+    .container {
+        padding: var(--spacing-lg) var(--spacing-md);
+    }
+
+    .models-grid {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: var(--spacing-lg);
+    }
+}

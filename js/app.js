@@ -1,11 +1,6 @@
 /**
- * Приложение 3D Viewer — ядро
- *
- * Содержит:
- * - CSV утилиты (encoding detection, parsing, loading, finding)
- * - Общие утилиты (onReady, withModel, escapeHtml, getProjectId, deepClone)
- * - Store (централизованное хранилище состояния)
- * - DataService (загрузка данных проектов с кэшированием)
+ * Приложение 3D Viewer — ядро.
+ * CSV-утилиты, общие хелперы, Store (хранилище состояния), DataService (загрузка проектов).
  */
 
 // ============================================================
@@ -140,14 +135,6 @@ function onReady(fn) {
     }
 }
 
-/** Хелпер для traverse-операций над загруженной моделью */
-function withModel(callback) {
-    if (window.ModelViewer?.isModelLoaded()) {
-        const m = window.ModelViewer.getModel();
-        if (m) callback(m);
-    }
-}
-
 /** Экранирует HTML-спецсимволы для безопасной вставки в innerHTML */
 function escapeHtml(value) {
     if (value === null || value === undefined) return '';
@@ -190,20 +177,9 @@ function deepClone(obj) {
     return cloned;
 }
 
-/** Начальное состояние приложения */
 const initialState = {
-    project: {
-        currentId: null,
-        data: null,
-        isLoading: false,
-        error: null
-    },
-    model: {
-        object: null,
-        isLoaded: false,
-        color: null,
-        path: null
-    },
+    project: { currentId: null, data: null, isLoading: false, error: null },
+    model: { object: null, isLoaded: false },
     cutting3d: {
         isActive: false,
         activeAxis: null,
@@ -211,30 +187,15 @@ const initialState = {
         axisBounds: { x: { min: -1, max: 1 }, y: { min: -1, max: 1 }, z: { min: -1, max: 1 } },
         invertedAxes: { x: false, y: false, z: false }
     },
-    specification: {
-        structure: [],
-        csvData: [],
-        lastSelectedPart: null,
-        isLoading: false
-    },
+    specification: { structure: [], csvData: [], lastSelectedPart: null, isLoading: false },
     cutting: {
-        materialsData: {},
-        isLoading: false,
-        settings: { stockLength: 6000, kerf: 0, multiplicity: 1 },
-        results: null
+        materialsData: {}, isLoading: false,
+        settings: { stockLength: 6000, kerf: 0, multiplicity: 1 }, results: null
     },
     ui: {
-        currentView: 'specification',
-        currentMode: '3D',
-        infoPanelHeight: null,
-        isFullscreen: false,
-        activeContainer: 'model',
-        settings: {
-            modelColor: '#CCCCCC',
-            modelMetalness: 0.1,
-            modelRoughness: 0.75,
-            themeMode: 'auto'
-        }
+        currentView: 'specification', currentMode: '3D',
+        infoPanelHeight: null, isFullscreen: false, activeContainer: 'model',
+        settings: { modelColor: '#CCCCCC', modelMetalness: 0.1, modelRoughness: 0.75, themeMode: 'auto' }
     },
     drawing: { currentPart: null }
 };
@@ -299,13 +260,10 @@ class Store {
             }
         });
     }
-
 }
 
-/** Экземпляр хранилища */
 export const store = new Store(initialState);
 
-// Восстанавливаем настройки UI из localStorage
 const _savedUISettings = localStorage.getItem('uiSettings');
 if (_savedUISettings) {
     try {
@@ -316,7 +274,6 @@ if (_savedUISettings) {
     }
 }
 
-// Применяем тему как можно раньше (до рендера)
 const _initialTheme = store.getState('ui.settings.themeMode');
 if (_initialTheme && _initialTheme !== 'auto') {
     document.documentElement.setAttribute('data-theme', _initialTheme);
@@ -326,11 +283,7 @@ if (_initialTheme && _initialTheme !== 'auto') {
 // DATA SERVICE — Загрузка данных проектов с кэшированием
 // ============================================================
 
-const projectsCache = {
-    data: null,
-    timestamp: 0,
-    ttl: 5 * 60 * 1000
-};
+const projectsCache = { data: null, timestamp: 0, ttl: 5 * 60 * 1000 };
 let isLoadingProjects = false;
 let projectsLoadPromise = null;
 
@@ -398,25 +351,7 @@ export const DataService = {
 
     getSelectedProject() {
         return store.getState('project.currentId') || localStorage.getItem('selectedProject');
-    },
-
-    clearCache() {
-        projectsCache.data = null;
-        projectsCache.timestamp = 0;
-    },
-
-    isProjectsLoaded() {
-        return projectsCache.data !== null;
-    },
-
-    getCachedProject(projectId) {
-        if (!projectsCache.data) return null;
-        return projectsCache.data.find(p => p.id === projectId);
     }
 };
 
-// ============================================================
-// ЭКСПОРТ
-// ============================================================
-
-export { withModel, onReady, getProjectId, escapeHtml, deepClone, loadCSV, findInCSV, parseCSV, decodeCSV, ENCODINGS };
+export { onReady, getProjectId, escapeHtml, deepClone, loadCSV, findInCSV, parseCSV, decodeCSV, ENCODINGS };

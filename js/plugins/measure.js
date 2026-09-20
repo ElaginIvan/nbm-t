@@ -1,18 +1,10 @@
 /**
- * Плагин: Измерение (3D)
- *
- * Инструменты измерения модели: длина ребра, расстояние между элементами,
- * углы (рёбра, грани, двугранный), площадь грани, радиус/диаметр дуг.
- *
- * Адаптация standalone-проекта measurement.js → плагин plugin-system.js.
- * Все глобальные ссылки (camera, renderer, controls, scene и т.д.)
- * заменены на локальные переменные, получаемые через api в init().
+ * Плагин: Измерение (3D) — длина ребра, расстояние, углы, площадь, радиус/диаметр дуг.
+ * Адаптация measurement.js → плагин plugin-system.js (camera/renderer/scene/controls через api).
  */
 
 import * as THREE from 'three';
-// CSS2DRenderer и CSS2DObject — именованные экспорты модуля three/addons/CSS2DRenderer.js.
-// Важно: они НЕ являются свойствами неймспейса THREE (THREE.CSS2DRenderer === undefined),
-// поэтому используем их напрямую как импортированные биндинги.
+// CSS2DRenderer/CSS2DObject — именованные экспорты (THREE.CSS2DRenderer === undefined).
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/CSS2DRenderer.js';
 import PluginManager from '../plugin-system.js';
 
@@ -62,11 +54,13 @@ let _mouse = new THREE.Vector2();
 
 // События
 let _clickTimeout = null;
+let _confirmResetTimer = null;  // отложенный сброс после измерения (800 мс)
+let _cameraMoveTimer = null;
+let _lastMouseMoveT = 0;        // троттлинг тяжёлого mousemove-снапа
 let _touchMoved = false;
 let _touchStartPos = null;
 let _touchStartTime = 0;
 let _cameraMoved = false;
-let _cameraMoveTimer = null;
 let _initialCamPos = null;
 let _initialCamTarget = null;
 
@@ -76,6 +70,13 @@ let _toolbarEl = null;
 // Кэши смежности
 let _adjCache = new Map(), _smoothCache = new Map();
 const _clearCache = () => { _adjCache.clear(); _smoothCache.clear(); };
+
+// Слушатель перезагрузки модели (инвалидация кэшей/мешей)
+let _modelLoadedHandler = null;
+
+// Слушатели событийного рендера меток (change контроллов, model-transformed)
+let _controlsRenderHandler = null;
+let _modelTransformedHandler = null;
 
 // Cleanup-функции
 let _boundEventHandlers = [];
@@ -136,7 +137,8 @@ function projectLinePoints(p1, p2, dimMode) {
 function createLabel(text, position, color) {
     const div = document.createElement('div');
     div.textContent = text;
-    const col = typeof color === 'number' ? '#' + color.toString(16) : color;
+    // padStart: без него тёмные цвета дают невалидный hex вида '#a2f7'
+    const col = typeof color === 'number' ? '#' + color.toString(16).padStart(6, '0') : color;
     div.style.cssText = `color:${col};font:bold 16px monospace;background:rgba(10,10,30,0.85);padding:4px 8px;border-radius:6px;border:1px solid ${col};backdrop-filter:blur(4px);white-space:nowrap;text-shadow:1px 1px 0 rgba(0,0,0,0.5)`;
     const label = new CSS2DObject(div);
     label.position.copy(position);
@@ -169,7 +171,6 @@ function createDimLabel(group, dimStart, dimEnd, dimMid, dimDir, offsetDir, colo
     const extEnd = add(extStart, mul(extDir, extLen));
     group.add(makeLine([extStart, extEnd], color, { opacity: 0.7 }));
     const label = createLabel(text, extEnd, color);
-    if (label.element) label.element.style.transform = 'translate(0, -50%)';
     group.add(label);
 }
 
@@ -420,6 +421,9 @@ function detectArcOrCircle(edgeSel) {
     const angTol = Math.max(avgAng * 0.15, 0.05);
     if (angles.some(a => Math.abs(a - avgAng) > angTol)) return null;
     const isClosed = dist(chain[0], chain[chain.length - 1]) < refLen * 1.2;
+    // Замкнутая цепочка равных рёбер может быть правильным многоугольником, а не окружностью.
+    // Отличаем по углу поворота между сегментами: порог 0.55 рад => окружность минимум из 12 сегментов.
+    if (isClosed && avgAng > 0.55) return null;
     const midI = Math.floor(chain.length / 2);
     const center = circumCenter(chain[0], chain[midI], isClosed ? chain[chain.length - 2] : chain[chain.length - 1], n);
     if (!center) return null;
@@ -875,16 +879,13 @@ function _addMeasurement(s1, s2) {
         if (s1.type === 'edge' && arcInfo) {
             mType = arcInfo.isCircle ? 'edge-diameter' : 'edge-radius';
             result = createArcDimension(arcInfo, arcInfo.isCircle ? 'diameter' : 'radius');
-            if (!result) { result = createEdgeDimensionLine(s1.meta.vertices[0], s1.meta.vertices[1]); mType = 'edge-len'; }
         } else if (s1.type === 'edge') {
             result = createEdgeDimensionLine(s1.meta.vertices[0], s1.meta.vertices[1]);
-            if (!result) return null;
             mType = 'edge-len';
         } else if (s1.type === 'vertex' && arcInfo) {
             vertexArcInfo = arcInfo;
             mType = arcInfo.isCircle ? 'edge-diameter' : 'edge-radius';
             result = createArcDimension(arcInfo, arcInfo.isCircle ? 'diameter' : 'radius');
-            if (!result) return null;
         } else if (s1.type === 'vertex') {
             return null;
         } else if (s1.type === 'face') {
@@ -921,8 +922,7 @@ function _addMeasurement(s1, s2) {
             if (Math.abs(dot(norm(sub(pair.edge.meta.vertices[1], pair.edge.meta.vertices[0])), getSelNormal(pair.face))) < CONFIG.parallelThreshold) {
                 mType = 'f-e'; result = MEAS_TYPES['f-e'].create(adjS1, adjS2, {});
             } else {
-                result = createEdgeFaceAngleDimension(pair.edge, pair.face); mType = 'e-f-ang';
-                if (!result) { mType = 'f-e'; result = MEAS_TYPES['f-e'].create(adjS1, adjS2, {}); }
+                mType = 'e-f-ang'; result = createEdgeFaceAngleDimension(pair.edge, pair.face);
             }
         } else if (pair.types === 'edge-vertex') {
             mType = 'e-v'; result = MEAS_TYPES['e-v'].create(adjS1, adjS2, {});
@@ -952,13 +952,15 @@ function _addMeasurement(s1, s2) {
         s1: (isAngle || isLinear || isArc) ? adjS1 : null,
         s2: (isAngle || isLinear || isArc) ? adjS2 : null,
         center: result.center || null, arcNormal: result.arcNormal || null,
-        arcInfo: isArc ? (vertexArcInfo || detectArcOrCircle(s1)) : null,
+        arcInfo: isArc ? vertexArcInfo : null,
         circleCenters: s2 ? [s1CircleInfo, s2CircleInfo] : null
     };
     _measurements.push(meas);
     _clearHL();
     _addLabelSelectionHandlers(result.group, id);
     _selectMeasurement(id);
+    // DOM-элемент метки попадает в оверлей только при рендере CSS2DRenderer
+    _renderLabels();
     return meas;
 }
 
@@ -1179,17 +1181,8 @@ function _findSnapElement(ev) {
     _mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     _mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     _raycaster.setFromCamera(_mouse, _camera);
-    // ВАЖНО: recursive=false.
-    // В интегрированной версии 3d-viewer.js вызывает addEdgesToObject(model),
-    // который добавляет каждому мешу дочерний LineSegments (рёбра/диагонали).
-    // С recursive=true (по умолчанию) raycaster попадает в эти LineSegments
-    // вместо самой геометрии меша — из-за чего:
-    //   1) при наведении подсвечиваются диагонали и линии рёбер;
-    //   2) detectArcOrCircle ломается (работает с LineSegments-геометрией) → диаметр не определяется.
-    // recursive=false заставляет raycaster тестировать только собственную
-    // геометрию мешей (как в оригинальном standalone-варианте, где у мешей
-    // вообще не было детей).
-    // Дополнительный фильтр isMesh — защитный пояс на случай вложенных мешей.
+    // recursive=false: иначе raycaster попадает в дочерние LineSegments рёбер вместо меша.
+    // Фильтр isMesh — защитный пояс на случай вложенных мешей.
     const allHits = _raycaster.intersectObjects(_meshObjects, false);
     const hits = allHits.filter(h => h.object.isMesh);
     return hits.length > 0 ? _snapToElement(hits[0].point, hits[0].object) : null;
@@ -1217,8 +1210,6 @@ function _highlight(sel) {
 function _clearHL() {
     if (_edgeHighlight) { _helpersGroup.remove(_edgeHighlight); _edgeHighlight.geometry?.dispose(); _edgeHighlight.material?.dispose(); _edgeHighlight = null; }
     if (_faceHighlight) { _helpersGroup.remove(_faceHighlight); _faceHighlight.traverse(c => { c.geometry?.dispose(); c.material?.dispose(); }); _faceHighlight = null; }
-    const rem = _helpersGroup.children.filter(c => c.userData?.isFaceFill || (c.isMesh && c.material?.transparent && c.material.opacity === 0.2));
-    rem.forEach(c => { _helpersGroup.remove(c); c.geometry?.dispose(); c.material?.dispose(); });
 }
 
 // ============================================================
@@ -1233,6 +1224,7 @@ function _applyRecreatedMeasurement(meas, result, measId) {
     if (result.arcNormal) meas.arcNormal = result.arcNormal;
     _addLabelSelectionHandlers(result.group, measId);
     if (_selectedMeasId === measId) _setLabelClass(meas.group, 'meas-label-selected', true);
+    _renderLabels(); // новая/пересозданная группа меток — синхронизируем слой
 }
 
 function _cycleAnglePosition(measId) {
@@ -1356,6 +1348,9 @@ function _cancelSelection() {
 }
 
 function _handleInteraction(clientX, clientY) {
+    // Защита: ссылки обнуляются в destroy, отложенные таймеры могут прийти после деактивации.
+    if (!_renderer || !_camera || !_firstMarker || !_hoverMarker) return;
+
     const ev = { clientX, clientY };
     const snap = _findSnapElement(ev);
     if (!snap) return;
@@ -1363,6 +1358,7 @@ function _handleInteraction(clientX, clientY) {
     if (!_firstSelection) {
         _firstSelection = snap;
         _firstMarker.visible = true;
+        _startPulseLoop(); // маркер видим — пульс работает только пока он не скрыт
         _firstMarker.position.copy(snap.point);
         const circleInfo = adjustSelectionToCircleCenter(snap);
         if (circleInfo) _firstMarker.position.copy(circleInfo.center);
@@ -1380,19 +1376,42 @@ function _handleInteraction(clientX, clientY) {
             _firstSelection = null; _firstMarker.visible = false; _firstMeasId = null;
             _updateToolbarState(); return;
         }
-        setTimeout(() => {
-            _firstSelection = null; _firstMarker.visible = false; _firstMeasId = null;
+        if (_confirmResetTimer) clearTimeout(_confirmResetTimer);
+        _confirmResetTimer = setTimeout(() => {
+            _confirmResetTimer = null;
+            // _firstMarker может быть обнулён в destroy за время таймера
+            _firstSelection = null;
+            if (_firstMarker) _firstMarker.visible = false;
+            _firstMeasId = null;
             _updateToolbarState();
         }, 800);
     }
 }
 
 // ============================================================
-// Анимационный цикл
+// Анимационный цикл — пульс маркеров (rAF живёт только пока виден маркер)
 // ============================================================
 
-function _animate() {
-    _animFrameId = requestAnimationFrame(_animate);
+/** Событийный рендер слоя CSS2D-меток (пересчёт позиций DOM-элементов). */
+function _renderLabels() {
+    if (_labelRenderer && _scene && _camera) {
+        _labelRenderer.render(_scene, _camera);
+    }
+}
+
+function _startPulseLoop() {
+    if (_animFrameId !== null) return;
+    // Фоновый режим: маркеры невидимы для пользователя — пульс не нужен.
+    // При возобновлении плагина цикл перезапустит следующий mousemove/клик.
+    if (PluginManager.isPluginPaused('measure')) return;
+    _animFrameId = requestAnimationFrame(_pulseLoop);
+}
+
+function _pulseLoop() {
+    if (PluginManager.isPluginPaused('measure')) {
+        _animFrameId = null;
+        return;
+    }
     _animT += 0.03;
     if (_firstMarker && _firstMarker.visible) {
         const s = 1 + Math.sin(_animT * 3) * 0.15;
@@ -1402,8 +1421,13 @@ function _animate() {
         const s = 1 + Math.sin(_animT * 4) * 0.1;
         _hoverMarker.scale.set(s, s, s);
     }
-    if (_labelRenderer && _scene && _camera) {
-        _labelRenderer.render(_scene, _camera);
+    // Пульс меняет масштаб 3D-маркеров (рисует основной рендер вьювера); метки синхронизируем на время видимости.
+    _renderLabels();
+    // Цикл останавливается сам, когда оба маркера скрыты
+    if ((_firstMarker && _firstMarker.visible) || (_hoverMarker && _hoverMarker.visible)) {
+        _animFrameId = requestAnimationFrame(_pulseLoop);
+    } else {
+        _animFrameId = null;
     }
 }
 
@@ -1430,8 +1454,11 @@ function _collectMeshes() {
 function _showRipple(x, y) {
     const r = document.createElement('div');
     r.className = 'touch-ripple';
-    r.style.left = x + 'px';
-    r.style.top = y + 'px';
+    // clientX/Y — viewport-координаты, а риппл аппендится в контейнер,
+    // который может быть смещён относительно начала страницы
+    const rect = _container.getBoundingClientRect();
+    r.style.left = (x - rect.left) + 'px';
+    r.style.top = (y - rect.top) + 'px';
     _container.appendChild(r);
     setTimeout(() => r.remove(), 500);
 }
@@ -1521,16 +1548,27 @@ PluginManager.register({
                 _cameraMoveTimer = setTimeout(() => { _cameraMoved = false; }, 300);
             }
         };
-        _controls.addEventListener('start', _controlsStartHandler);
-        _controls.addEventListener('change', _controlsChangeHandler);
+        // controls может отсутствовать (condition это не проверяет) — не падаем
+        if (_controls) {
+            _controls.addEventListener('start', _controlsStartHandler);
+            _controls.addEventListener('change', _controlsChangeHandler);
+            // Событийный рендер меток при движении камеры (отдельный слушатель: _controlsChangeHandler выходит до первого 'start')
+            _controlsRenderHandler = () => _renderLabels();
+            _controls.addEventListener('change', _controlsRenderHandler);
+        }
 
         // События на canvas
         const canvas = _renderer.domElement;
 
         const mousemoveHandler = ev => {
+            // Троттлинг ~30 fps: raycast + closest-point по всем граням на каждом mousemove
+            const now = performance.now();
+            if (now - _lastMouseMoveT < 33) return;
+            _lastMouseMoveT = now;
             const snap = _findSnapElement(ev);
             if (snap) {
                 _hoverMarker.visible = true;
+                _startPulseLoop(); // hover-маркер появился — запускаем пульс
                 _hoverMarker.position.copy(snap.point);
                 _highlight(snap);
                 canvas.style.cursor = 'crosshair';
@@ -1542,6 +1580,15 @@ PluginManager.register({
         };
         canvas.addEventListener('mousemove', mousemoveHandler);
         _boundEventHandlers.push({ el: canvas, type: 'mousemove', handler: mousemoveHandler });
+
+        // Уход курсора за пределы canvas — сбрасываем hover/курсор, иначе висят до следующего mousemove
+        const mouseleaveHandler = () => {
+            _hoverMarker.visible = false;
+            _clearHL();
+            canvas.style.cursor = 'default';
+        };
+        canvas.addEventListener('mouseleave', mouseleaveHandler);
+        _boundEventHandlers.push({ el: canvas, type: 'mouseleave', handler: mouseleaveHandler });
 
         const clickHandler = e => {
             if (_cameraMoved) { _cameraMoved = false; return; }
@@ -1589,12 +1636,12 @@ PluginManager.register({
         canvas.addEventListener('touchend', touchendHandler, { passive: false });
         _boundEventHandlers.push({ el: canvas, type: 'touchend', handler: touchendHandler, opts: { passive: false } });
 
-        // Resize CSS2DRenderer — используем ResizeObserver вместо window.resize,
-        // чтобы ловить изменение размера контейнера при фуллскрине и перетаскивании панели.
+        // ResizeObserver ловит ресайз контейнера при фуллскрине/перетаскивании панели (а не только window.resize)
         _resizeHandler = () => {
             if (_labelRenderer && _container) {
                 _labelRenderer.setSize(_container.clientWidth, _container.clientHeight);
             }
+            _renderLabels(); // после ресайза позиции меток пересчитываются сразу
         };
         window.addEventListener('resize', _resizeHandler);
         if (typeof ResizeObserver !== 'undefined' && _container) {
@@ -1602,8 +1649,34 @@ PluginManager.register({
             _resizeObserver.observe(_container);
         }
 
-        // Анимация
-        _animate();
+        // Пульс стартует только при появлении маркера; рендер меток — событийный (change/мутации/ресайз).
+        // Кэш геометрии в мировых координатах инвалидируется при model-transformed и modelLoaded.
+        _modelLoadedHandler = () => {
+            _clearCache();
+            const freshModel = PluginManager.getModuleAPI('3d-viewer')?.model;
+            if (freshModel && freshModel !== _model) {
+                _model = freshModel;
+                _collectMeshes();
+                _model.updateMatrixWorld(true);
+                // Измерения и выделения старой модели теряют смысл
+                for (const m of [..._measurements]) {
+                    if (m.group) { _measurementsGroup?.remove(m.group); _disposeGroup(m.group); }
+                }
+                _measurements = [];
+                _selectedMeasId = null;
+                _firstSelection = null;
+                _firstMeasId = null;
+                if (_firstMarker) _firstMarker.visible = false;
+                if (_hoverMarker) _hoverMarker.visible = false;
+                _clearHL();
+                _updateToolbarState();
+                _renderLabels(); // слои меток после смены модели — синхронизируем
+            }
+        };
+        window.addEventListener('modelLoaded', _modelLoadedHandler);
+        // Трансформация модели (гизмо) двигает и метки — рендерим событийно
+        _modelTransformedHandler = () => { _clearCache(); _renderLabels(); };
+        window.addEventListener('model-transformed', _modelTransformedHandler);
 
         return () => {
             window.removeEventListener('resize', _resizeHandler);
@@ -1612,8 +1685,16 @@ PluginManager.register({
     },
 
     destroy() {
+        // Гасим таймеры до сброса ссылок — иначе колбэки разыменовывают _firstMarker/_renderer после destroy → TypeError
+        if (_confirmResetTimer) { clearTimeout(_confirmResetTimer); _confirmResetTimer = null; }
+        if (_clickTimeout) { clearTimeout(_clickTimeout); _clickTimeout = null; }
+        if (_cameraMoveTimer) { clearTimeout(_cameraMoveTimer); _cameraMoveTimer = null; }
+
         // Останавливаем анимацию
         if (_animFrameId) { cancelAnimationFrame(_animFrameId); _animFrameId = null; }
+
+        // Курсор мог остаться crosshair — сбрасываем до обнуления _renderer
+        if (_renderer?.domElement) _renderer.domElement.style.cursor = '';
 
         // Удаляем все измерения
         for (const m of [..._measurements]) {
@@ -1651,11 +1732,23 @@ PluginManager.register({
         if (_resizeHandler) { window.removeEventListener('resize', _resizeHandler); _resizeHandler = null; }
         if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null; }
 
+        // Инвалидация кэшей при трансформации/перезагрузке модели
+        if (_modelLoadedHandler) {
+            window.removeEventListener('modelLoaded', _modelLoadedHandler);
+            _modelLoadedHandler = null;
+        }
+        if (_modelTransformedHandler) {
+            window.removeEventListener('model-transformed', _modelTransformedHandler);
+            _modelTransformedHandler = null;
+        }
+
         // Контролсы
         if (_controlsStartHandler) _controls?.removeEventListener('start', _controlsStartHandler);
         if (_controlsChangeHandler) _controls?.removeEventListener('change', _controlsChangeHandler);
+        if (_controlsRenderHandler) _controls?.removeEventListener('change', _controlsRenderHandler);
         _controlsStartHandler = null;
         _controlsChangeHandler = null;
+        _controlsRenderHandler = null;
 
         // Кэши
         _clearCache();
@@ -1733,8 +1826,11 @@ PluginManager.register({
                     if (_selectedMeasId !== null) {
                         const deletedId = _selectedMeasId;
                         _removeMeasurement(deletedId);
-                        if (_firstMeasId === deletedId) { _firstMeasId = null; _firstSelection = null; _firstMarker.visible = false; _clearHL(); }
-                        if (_firstMarker?.visible) { _firstMarker.visible = false; _firstSelection = null; _firstMeasId = null; _clearHL(); }
+                        if (_firstMeasId === deletedId || _firstMarker?.visible) {
+                            _firstMeasId = null; _firstSelection = null;
+                            if (_firstMarker) _firstMarker.visible = false;
+                            _clearHL();
+                        }
                         _updateToolbarState();
                     }
                 };

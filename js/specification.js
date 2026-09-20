@@ -1,11 +1,7 @@
 /**
- * Specification Module
- * Спецификация модели и страница проекта
- *
- * Содержит:
- * - SpecificationService (извлечение структуры, подсветка деталей, CSV)
- * - ProjectPage (инициализация страницы проекта)
- * - Таблица спецификации (рендер, события, подписки)
+ * Specification Module — спецификация модели и страница проекта.
+ * SpecificationService: извлечение структуры, подсветка деталей, CSV.
+ * ProjectPage: инициализация страницы проекта.
  */
 
 import { store, loadCSV, findInCSV, escapeHtml, DataService } from './app.js';
@@ -18,7 +14,7 @@ function cleanName(name) {
     return name ? name.replace(/:\d+$/, '').trim() : '';
 }
 
-/** Сбрасывает все меши модели */
+/** Сбрасывает все меши модели в исходное состояние. */
 function _resetAllMeshes(structure) {
     structure.forEach(item => {
         if (!item.threeObjects) return;
@@ -34,12 +30,17 @@ function _resetAllMeshes(structure) {
     });
 }
 
+/** Уведомляет об изменении состава видимых деталей (для перерисовки карты теней). */
+function _visibilityChanged() {
+    window.dispatchEvent(new Event('model-visibility-changed'));
+}
+
 const SpecificationService = {
     async loadCSVData(projectId) {
         if (!projectId) return [];
         const project = store.getState('project.data');
-        const csvPath = project.specFile;
-        const csvData = await loadCSV(csvPath);
+        if (!project?.specFile) return [];
+        const csvData = await loadCSV(project.specFile);
         store.setState('specification.csvData', csvData);
         return csvData;
     },
@@ -138,13 +139,11 @@ const SpecificationService = {
 
     async saveModelStructure(threeModel, projectId) {
         try {
-            store.setState('specification.isLoading', true);
             await this.loadCSVData(projectId);
             const structure = this.extractModelStructure(threeModel);
             store.setState('specification.structure', structure);
         } catch (error) {
             console.error('Error in saveModelStructure:', error);
-            // Показываем пользователю, что спецификация не загрузилась
             const tbody = document.getElementById('specification-body');
             if (tbody) {
                 tbody.innerHTML = `
@@ -159,8 +158,6 @@ const SpecificationService = {
                     </td></tr>
                 `;
             }
-        } finally {
-            store.setState('specification.isLoading', false);
         }
     },
 
@@ -169,9 +166,9 @@ const SpecificationService = {
         const structure = store.getState('specification.structure');
         if (!structure) return;
         _resetAllMeshes(structure);
-        if (!partName) return;
+        if (!partName) { _visibilityChanged(); return; }
         const groupsToShow = structure.filter(item => item.name.toLowerCase() === partName.toLowerCase());
-        if (!groupsToShow.length) return;
+        if (!groupsToShow.length) { _visibilityChanged(); return; }
         const meshesToShow = new Set();
         groupsToShow.forEach(g => g.threeObjects?.forEach(o => o.traverse(c => { if (c.isMesh) meshesToShow.add(c); })));
         if (hideOthers) {
@@ -181,23 +178,23 @@ const SpecificationService = {
                 }));
             });
         }
+        _visibilityChanged();
     },
 
     showAllParts() {
         store.setState('specification.lastSelectedPart', null);
         const structure = store.getState('specification.structure');
         if (structure) _resetAllMeshes(structure);
+        _visibilityChanged();
     },
 
     clear() {
         store.setState('specification.structure', []);
         store.setState('specification.csvData', []);
         store.setState('specification.lastSelectedPart', null);
-        store.setState('specification.isLoading', false);
     }
 };
 
-// Глобальный экспорт для совместимости
 window.SpecificationService = SpecificationService;
 
 // ============================================================
@@ -206,6 +203,7 @@ window.SpecificationService = SpecificationService;
 
 function renderSpecificationTable(structure) {
     const tbody = document.getElementById('specification-body');
+    if (!tbody) return;
 
     if (!structure || structure.length === 0) {
         tbody.innerHTML = `
@@ -285,7 +283,6 @@ function loadDrawingForPart(partName, attempt = 0) {
         setTimeout(() => loadDrawingForPart(partName, attempt + 1), 100);
     } else {
         console.warn(`loadDrawingForPart: DrawingViewer не стал доступен после ${MAX_ATTEMPTS} попыток.`);
-        // Показываем пользователю, что модуль 2D-чертежей не загрузился
         const placeholder = document.getElementById('drawing-placeholder');
         const imageElement = document.getElementById('drawing-image');
         if (placeholder) {
@@ -374,9 +371,5 @@ export const ProjectPage = {
         }
     }
 };
-
-// ============================================================
-// ЭКСПОРТ
-// ============================================================
 
 export { SpecificationService };

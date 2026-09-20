@@ -37,28 +37,6 @@
     z-index: 1;
 }
 
-/* --- Кнопка сетки — активная (сетка видна) --- */
-#cam-grid-btn.active {
-    color: #4ecdc4;
-    background: rgba(78, 205, 196, 0.3);
-    border-color: rgba(78, 205, 196, 0.6);
-    box-shadow: 0 2px 8px rgba(78, 205, 196, 0.25);
-}
-#cam-grid-btn.active svg {
-    fill: #4ecdc4;
-}
-
-/* --- Кнопка тени — активная (тень включена) --- */
-#cam-shadow-btn.active {
-    color: #a29bfe;
-    background: rgba(162, 155, 254, 0.3);
-    border-color: rgba(162, 155, 254, 0.6);
-    box-shadow: 0 2px 8px rgba(162, 155, 254, 0.25);
-}
-#cam-shadow-btn.active svg {
-    fill: #a29bfe;
-}
-
 /* --- FOV слайдер --- */
 .cam-fov-group {
     display: flex;
@@ -118,18 +96,6 @@
     opacity: 0.8;
     user-select: none;
     -webkit-user-select: none;
-}
-
-/* --- Кнопка фото (скриншот) --- */
-.cam-screenshot-icon {
-    width: 18px;
-    height: 18px;
-}
-
-/* --- Кнопка паузы камеры --- */
-.cam-pause-icon {
-    width: 18px;
-    height: 18px;
 }
 
 #cam-pause-btn.active {

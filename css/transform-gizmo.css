@@ -5,15 +5,8 @@
    цветовые состояния кнопок режимов.
    ========================================================== */
 
-/* Панель — расширяет .plugin-pill */
-.gizmo-panel {
-    /* стили наследуются от .plugin-pill */
-}
-
-/* Кнопки — расширяют .plugin-pill-btn */
-.gizmo-btn {
-    /* стили наследуются от .plugin-pill-btn */
-}
+/* Панель (.gizmo-panel) и кнопки (.gizmo-btn) наследуют стили
+   .plugin-pill / .plugin-pill-btn — пустые заглушки удалены */
 
 /* --- Кнопка перемещения — активная --- */
 .gizmo-btn[data-mode="translate"].active,
@@ -57,4 +50,170 @@
 }
 #gizmo-reset-btn:hover svg {
     fill: #e04040;
+}
+
+/* ==========================================================
+   Ф1: Панель точного ввода смещения (transform-gizmo.js)
+   Появляется над док-панелью: режим «Точный ввод» включён +
+   режим «Перемещение» + есть выделение. Поля dX/dY/dZ — живой
+   читout величины смещения при перетаскивании гизмо и точный
+   ввод с применением по Enter. Цвета осей — как у гизмо.
+   ========================================================== */
+
+/* --- Кнопка точного ввода — активная --- */
+#gizmo-precise-btn.active {
+    color: #4ecdc4;
+    background: rgba(78, 205, 196, 0.25);
+    border-color: rgba(78, 205, 196, 0.6);
+    box-shadow: 0 2px 8px rgba(78, 205, 196, 0.25);
+}
+
+.gizmo-precise-panel {
+    position: fixed;
+    left: 50%;
+    bottom: 118px;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px 9px;
+    background: var(--button-color, rgba(30, 30, 40, 0.92));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 14px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    color: var(--text-color, #fff);
+    font-family: inherit;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.18s ease, visibility 0.18s ease,
+                transform 0.18s ease, border-color 0.18s ease;
+    user-select: none;
+    touch-action: manipulation;
+}
+.gizmo-precise-panel.visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+}
+/* Подсветка на время перетаскивания: значения в полях «живые» */
+.gizmo-precise-panel.dragging {
+    border-color: rgba(78, 205, 196, 0.55);
+}
+
+.gizmo-precise-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+}
+.gizmo-precise-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.55));
+    white-space: nowrap;
+}
+.gizmo-precise-dist {
+    font-size: 12px;
+    font-weight: 700;
+    color: #4ecdc4;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.gizmo-precise-dist i {
+    font-style: normal;
+    font-weight: 400;
+    font-size: 10px;
+    margin-left: 2px;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.45));
+}
+
+.gizmo-precise-fields {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.gizmo-precise-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(127, 127, 127, 0.15);
+    border: 1px solid rgba(127, 127, 127, 0.3);
+    border-radius: 8px;
+    padding: 3px 6px;
+    cursor: text;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.gizmo-precise-field span {
+    font-size: 11px;
+    font-weight: 700;
+    width: 10px;
+    text-align: center;
+    flex-shrink: 0;
+}
+.gizmo-precise-field.axis-x span { color: #ef4444; }
+.gizmo-precise-field.axis-y span { color: #22c55e; }
+.gizmo-precise-field.axis-z span { color: #3b82f6; }
+.gizmo-precise-field input {
+    width: 62px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    padding: 2px 0;
+    outline: none;
+    user-select: text;
+    pointer-events: auto;
+}
+.gizmo-precise-field:focus-within {
+    border-color: rgba(78, 205, 196, 0.6);
+    box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.15);
+}
+.gizmo-precise-field.invalid {
+    border-color: rgba(224, 64, 64, 0.7);
+    box-shadow: 0 0 0 2px rgba(224, 64, 64, 0.15);
+}
+
+.gizmo-precise-apply {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(78, 205, 196, 0.2);
+    color: #4ecdc4;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0;
+    transition: background 0.15s ease, transform 0.1s ease;
+}
+.gizmo-precise-apply:hover {
+    background: rgba(78, 205, 196, 0.35);
+}
+.gizmo-precise-apply:active {
+    transform: scale(0.92);
+}
+
+/* Мобильная адаптация: компактнее, выше от док-панели (она ниже) */
+@media (max-width: 768px) {
+    .gizmo-precise-panel {
+        bottom: 108px;
+        padding: 7px 8px 8px;
+        gap: 5px;
+    }
+    .gizmo-precise-field input {
+        width: 50px;
+        font-size: 12px;
+    }
 }

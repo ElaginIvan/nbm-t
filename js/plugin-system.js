@@ -271,6 +271,12 @@ function _injectStyles() {
         height: 100dvh;
     }
 }
+
+/* --- Блокировка взаимодействия для фоновых плагинов --- */
+.plugin-overlay-paused,
+.plugin-overlay-paused * {
+    pointer-events: none !important;
+}
 `;
     document.head.appendChild(style);
 }
@@ -282,6 +288,11 @@ function _injectStyles() {
 const _plugins = new Map();
 const _moduleAPIs = new Map();
 const _moduleInstances = new Map(); // 'moduleId:pluginId' -> { cleanup, panelUnmount, toolbarEl }
+
+// Плагины, переведённые в фоновый режим (пауза взаимодействий).
+// Общий контракт для плагинов: слушатели на window/document (которые
+// plugin-system не снимает) обязаны проверять PluginManager.isPluginPaused(id).
+const _pausedPlugins = new Set();
 
 const PluginManager = {
 
@@ -298,6 +309,16 @@ const PluginManager = {
 
     registerModuleAPI(moduleId, api) {
         _moduleAPIs.set(moduleId, api);
+    },
+
+    /**
+     * Находится ли плагин в фоновом режиме (пауза взаимодействий).
+     * Контракт для плагинов: обработчики на window/document, зарегистрированные
+     * мимо перехвата canvas-событий, должны проверять это состояние и не
+     * реагировать на ввод, пока плагин в фоне.
+     */
+    isPluginPaused(pluginId) {
+        return _pausedPlugins.has(pluginId);
     },
 
     getModuleAPI(moduleId) {
@@ -352,19 +373,139 @@ const PluginManager = {
         const runningPlugins = new Set();
         let activePluginId = null;
 
-        // Создаём кнопки только для включённых плагинов
-        enabledPlugins.forEach(plugin => {
+        // ============================================================
+        // ЦЕНТРАЛИЗОВАННЫЙ ШЛЮЗ СОБЫТИЙ
+        // Блокирует взаимодействие (клики, касания) для плагинов,
+        // находящихся в фоновом режиме. Плагины не знают об этом
+        // механизме — всё управляется из plugin-system.js.
+        //
+        // Принцип:
+        // 1. Перехватываем addEventListener на canvas, чтобы знать,
+        //    какой плагин какие обработчики зарегистрировал.
+        // 2. Перехватываем appendChild на контейнере, чтобы знать,
+        //    какие DOM-оверлеи (например CSS2DRenderer) добавил плагин.
+        // 3. При переходе плагина в фон — удаляем его canvas-слушатели
+        //    и вешаем CSS-класс, блокирующий pointer-events на оверлеях.
+        // 4. При активации — возвращаем всё обратно.
+        // ============================================================
+
+        let _currentInitPluginId = null;
+        const _pluginCanvasListeners = new Map(); // pluginId -> [{type, handler, opts}]
+        const _pluginOverlays = new Map();         // pluginId -> [HTMLElement]
+
+        const _INTERACTION_TYPES = new Set([
+            'click', 'dblclick', 'contextmenu',
+            'mousedown', 'mouseup', 'mousemove',
+            'pointerdown', 'pointerup', 'pointermove',
+            'touchstart', 'touchmove', 'touchend', 'touchcancel',
+        ]);
+
+        const _modAPI = PluginManager.getModuleAPI(moduleId);
+        const _canvas = _modAPI?.renderer?.domElement || null;
+        let _origCanvasAdd = null, _origCanvasRemove = null, _origContainerAppend = null;
+
+        // Перехват addEventListener / removeEventListener на canvas
+        if (_canvas) {
+            _origCanvasAdd = _canvas.addEventListener;
+            _origCanvasRemove = _canvas.removeEventListener;
+
+            _canvas.addEventListener = function (type, handler, opts) {
+                if (_currentInitPluginId && _INTERACTION_TYPES.has(type)) {
+                    let arr = _pluginCanvasListeners.get(_currentInitPluginId);
+                    if (!arr) { arr = []; _pluginCanvasListeners.set(_currentInitPluginId, arr); }
+                    arr.push({ type, handler, opts });
+                }
+                return _origCanvasAdd.call(this, type, handler, opts);
+            };
+
+            _canvas.removeEventListener = function (type, handler, opts) {
+                if (_currentInitPluginId && _INTERACTION_TYPES.has(type)) {
+                    const arr = _pluginCanvasListeners.get(_currentInitPluginId);
+                    if (arr) {
+                        const idx = arr.findIndex(l => l.type === type && l.handler === handler);
+                        if (idx !== -1) arr.splice(idx, 1);
+                    }
+                }
+                return _origCanvasRemove.call(this, type, handler, opts);
+            };
+        }
+
+        // Перехват appendChild на контейнере — отслеживаем DOM-оверлеи плагинов
+        _origContainerAppend = container.appendChild;
+        container.appendChild = function (child) {
+            if (_currentInitPluginId && child instanceof HTMLElement) {
+                let arr = _pluginOverlays.get(_currentInitPluginId);
+                if (!arr) { arr = []; _pluginOverlays.set(_currentInitPluginId, arr); }
+                arr.push(child);
+            }
+            return _origContainerAppend.call(this, child);
+        };
+
+        /** Пауза: убрать canvas-слушатели + заблокировать pointer-events на оверлеях */
+        function _pausePluginInteractions(pluginId) {
+            _pausedPlugins.add(pluginId);
+            if (_canvas && _origCanvasRemove) {
+                const listeners = _pluginCanvasListeners.get(pluginId);
+                if (listeners) {
+                    for (const { type, handler, opts } of listeners) {
+                        _origCanvasRemove.call(_canvas, type, handler, opts);
+                    }
+                }
+            }
+            const overlays = _pluginOverlays.get(pluginId);
+            if (overlays) {
+                for (const el of overlays) {
+                    if (el.classList) el.classList.add('plugin-overlay-paused');
+                }
+            }
+        }
+
+        /** Возобновление: вернуть canvas-слушатели + снять блокировку с оверлеев */
+        function _resumePluginInteractions(pluginId) {
+            _pausedPlugins.delete(pluginId);
+            if (_canvas && _origCanvasAdd) {
+                const listeners = _pluginCanvasListeners.get(pluginId);
+                if (listeners) {
+                    for (const { type, handler, opts } of listeners) {
+                        _origCanvasAdd.call(_canvas, type, handler, opts);
+                    }
+                }
+            }
+            const overlays = _pluginOverlays.get(pluginId);
+            if (overlays) {
+                for (const el of overlays) {
+                    if (el.classList) el.classList.remove('plugin-overlay-paused');
+                }
+            }
+        }
+
+        /** Очистка трековых данных при уничтожении плагина */
+        function _cleanupPluginTracking(pluginId) {
+            _pluginCanvasListeners.delete(pluginId);
+            _pluginOverlays.delete(pluginId);
+            _pausedPlugins.delete(pluginId);
+        }
+
+        /** Единая фабрика кнопки дока (создание + включение из настроек) —
+         * замена двух копипаст. */
+        function _createDockButton(pluginId, plugin) {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'plugin-dock-btn';
-            btn.dataset.id = plugin.id;
+            btn.dataset.id = pluginId;
             btn.dataset.tooltip = plugin.name;
             btn.setAttribute('aria-label', plugin.name);
             btn.innerHTML = `<svg><use xlink:href="assets/icons/sprite.svg#${escapeHtml(plugin.icon)}"></use></svg>`;
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                _togglePlugin(plugin.id);
+                _togglePlugin(pluginId);
             });
+            return btn;
+        }
+
+        // Создаём кнопки только для включённых плагинов
+        enabledPlugins.forEach(plugin => {
+            const btn = _createDockButton(plugin.id, plugin);
             dock.appendChild(btn);
             buttons.set(plugin.id, btn);
         });
@@ -440,9 +581,11 @@ const PluginManager = {
             const moduleAPI = PluginManager.getModuleAPI(moduleId);
 
             let cleanup = null;
+            _currentInitPluginId = pluginId; // ← контекст для перехвата событий
             if (typeof plugin.init === 'function') {
                 cleanup = plugin.init(moduleAPI);
             }
+            _currentInitPluginId = null; // ← сброс контекста
 
             const toolbarEl = document.createElement('div');
             toolbarEl.className = 'plugin-toolbar';
@@ -475,8 +618,21 @@ const PluginManager = {
             if (!plugin) return;
             if (pluginId === activePluginId) return;
 
-            if (!runningPlugins.has(pluginId)) {
+            const wasBackground = runningPlugins.has(pluginId);
+            if (!wasBackground) {
                 _initPluginInstance(pluginId);
+            }
+
+            // Паузим ВСЕ другие запущенные плагины (они переходят в фон)
+            for (const id of runningPlugins) {
+                if (id !== pluginId) {
+                    _pausePluginInteractions(id);
+                }
+            }
+
+            // Если плагин был в фоне (и его слушатели были убраны) — возобновляем
+            if (wasBackground) {
+                _resumePluginInteractions(pluginId);
             }
 
             // Скрываем панель предыдущего активного
@@ -502,6 +658,7 @@ const PluginManager = {
         function _activatePluginBackground(pluginId) {
             if (runningPlugins.has(pluginId)) return;
             _initPluginInstance(pluginId);
+            _pausePluginInteractions(pluginId); // фон = пауза взаимодействий
             _updateButtonState(pluginId);
         }
 
@@ -525,6 +682,9 @@ const PluginManager = {
             if (typeof plugin?.destroy === 'function') plugin.destroy();
 
             runningPlugins.delete(pluginId);
+
+            // Очищаем трекинговые данные событий и оверлеев
+            _cleanupPluginTracking(pluginId);
 
             if (activePluginId === pluginId) {
                 activePluginId = null;
@@ -568,17 +728,7 @@ const PluginManager = {
                 const plugin = _plugins.get(pluginId);
                 if (!plugin || buttons.has(pluginId)) return;
 
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'plugin-dock-btn';
-                btn.dataset.id = pluginId;
-                btn.dataset.tooltip = plugin.name;
-                btn.setAttribute('aria-label', plugin.name);
-                btn.innerHTML = `<svg><use xlink:href="assets/icons/sprite.svg#${escapeHtml(plugin.icon)}"></use></svg>`;
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    _togglePlugin(pluginId);
-                });
+                const btn = _createDockButton(pluginId, plugin);
                 dock.appendChild(btn);
                 buttons.set(pluginId, btn);
 
@@ -623,6 +773,12 @@ const PluginManager = {
             destroy: () => {
                 deactivateAll();
                 window.removeEventListener('modelLoaded', _modelLoadedHandler);
+
+                // Восстанавливаем оригинальные методы, убранные перехват
+                if (_canvas && _origCanvasAdd)   _canvas.addEventListener = _origCanvasAdd;
+                if (_canvas && _origCanvasRemove) _canvas.removeEventListener = _origCanvasRemove;
+                if (_origContainerAppend) container.appendChild = _origContainerAppend;
+
                 dock.remove();
                 panelsContainer.remove();
             },
@@ -648,26 +804,11 @@ const PluginManager = {
         return _plugins.get(id) || null;
     },
 
-    /**
-     * Возвращает публичный API плагина (если он его предоставляет).
-     */
-    getPluginAPI(pluginId) {
-        const plugin = _plugins.get(pluginId);
-        return plugin?.getAPI ? plugin.getAPI() : null;
-    },
-
-    /**
-     * Делегирует per-frame обновление всем активным плагинам.
-     */
-    frameUpdate(now) {
-        for (const [key] of _moduleInstances) {
-            const pluginId = key.split(':').pop();
-            const plugin = _plugins.get(pluginId);
-            if (typeof plugin?.onFrame === 'function') {
-                plugin.onFrame(now);
-            }
-        }
-    },
+    // E8: метод frameUpdate (покадровая делегация плагинам) удалён.
+    // Единственный потребитель onFrame — view-display — переведён на
+    // событийную модель (controls 'change' / 'model-transformed' / слайдеры),
+    // per-frame потребителей не осталось. Новые плагины должны использовать
+    // события, а не поллинг: это требование энергоэффективности.
 
     // ============================================================
     // STORAGE API (для использования в ui-managers.js)
