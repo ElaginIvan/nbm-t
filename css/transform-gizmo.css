@@ -54,10 +54,11 @@
 
 /* ==========================================================
    Ф1: Панель точного ввода смещения (transform-gizmo.js)
-   Появляется над док-панелью: режим «Точный ввод» включён +
-   режим «Перемещение» + есть выделение. Поля dX/dY/dZ — живой
-   читout величины смещения при перетаскивании гизмо и точный
-   ввод с применением по Enter. Цвета осей — как у гизмо.
+   Привязана к .plugin-panels (как vd-sun-panel в view-display):
+   position: absolute над тулбаром плагина, появляется/исчезает
+   через scale-анимацию. Поля dX/dY/dZ — живой читout величины
+   смещения при перетаскивании гизмо и точный ввод с применением
+   по Enter. Цвета осей — как у гизмо.
    ========================================================== */
 
 /* --- Кнопка точного ввода — активная --- */
@@ -69,11 +70,14 @@
 }
 
 .gizmo-precise-panel {
-    position: fixed;
+    /* Привязка к .plugin-panels: панель живёт в её стеке, а не в document.body.
+       bottom: calc(100% + 50px) — 50px над тулбаром (как vd-sun-panel). */
+    position: absolute;
+    bottom: calc(100% + 50px);
     left: 50%;
-    bottom: 118px;
-    transform: translateX(-50%) translateY(8px);
-    z-index: 1100;
+    transform: translateX(-50%) scale(0.9);
+    transform-origin: center bottom;
+    z-index: 9996;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -98,7 +102,7 @@
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(-50%) scale(1);
 }
 /* Подсветка на время перетаскивания: значения в полях «живые» */
 .gizmo-precise-panel.dragging {
@@ -208,7 +212,7 @@
 /* Мобильная адаптация: компактнее, выше от док-панели (она ниже) */
 @media (max-width: 768px) {
     .gizmo-precise-panel {
-        bottom: 108px;
+        bottom: calc(100% + 44px);
         padding: 7px 8px 8px;
         gap: 5px;
     }

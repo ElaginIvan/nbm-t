@@ -753,7 +753,8 @@ PluginManager.register({
     id: 'camera-background',
     name: 'Камера (AR)',
     icon: 'camera',
-    module: '3d-viewer',
+    // module — не указывается; привязку к модулю задаёт администратор
+    // в js/plugins/registry.js через PluginManager.bindModules().
 
     condition: () => true,
 

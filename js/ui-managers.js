@@ -1,5 +1,6 @@
 /**
  * UI Managers Module — менеджеры интерфейса страницы проекта.
+ * Патч 2026-10-07 (v2): сохранение мультивыбора при развороте на весь экран.
  * FullscreenManager: полноэкранный режим.
  * ResizeHandler: изменение панели, переключение вкладок.
  * SettingsManager: модальное окно настроек.
@@ -114,7 +115,20 @@ export const FullscreenManager = {
 
     _updateButtonIcon() {
         const icon = this.isFullscreen ? 'compress' : 'expand';
-        this.toggleBtn.innerHTML = `<svg><use xlink:href="assets/icons/sprite.svg#${escapeHtml(icon)}"></use></svg>`;
+        // Обновляем только href у <use>, не пересоздавая содержимое кнопки:
+        // замена innerHTML во время обработки click отсоединяет <svg>, который
+        // является целью события, и проверка «клик мимо таблицы» в спецификации
+        // получает отсоединённую цель (isConnected = false, closest() не находит
+        // .control-buttons) — из-за этого мультивыбор сбрасывался при
+        // разворачивании/сворачивании на весь экран.
+        const use = this.toggleBtn.querySelector('use');
+        if (use) {
+            const href = `assets/icons/sprite.svg#${icon}`;
+            use.setAttribute('href', href);
+            use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', href);
+        } else {
+            this.toggleBtn.innerHTML = `<svg><use xlink:href="assets/icons/sprite.svg#${escapeHtml(icon)}"></use></svg>`;
+        }
     },
 
     _setupDrawingControls() {
@@ -339,7 +353,13 @@ export class ResizeHandler {
         const currentPane = document.getElementById(this.currentView);
         if (currentPane) currentPane.classList.add('active');
 
-        if (this.currentView === 'specification' && store.getState('specification.lastSelectedPart')) {
+        // Восстановление подсветки выбранной детали актуально только для
+        // одиночного режима. В мульти-режиме lastSelectedPart мог остаться от
+        // прежнего одиночного выбора — highlightParts() здесь сбросил бы
+        // мультивыбор (selectedParts = [], multiSelectMode = false).
+        if (this.currentView === 'specification'
+            && !store.getState('specification.multiSelectMode')
+            && store.getState('specification.lastSelectedPart')) {
             setTimeout(() => {
                 const selectedPart = store.getState('specification.lastSelectedPart');
                 document.querySelectorAll('.part-row').forEach(row => {
@@ -487,21 +507,51 @@ export const SettingsManager = {
         const table = document.getElementById('plugin-settings-table');
         if (!table) return;
 
-        const knownPlugins = [
-            { id: 'view-display', name: 'Вид (тени, сетка, рёбра)' },
-            { id: 'measure', name: 'Измерение' },
-            { id: 'cutting-3d', name: 'Сечение' },
-            { id: 'center-of-mass', name: 'Центр масс' },
-            { id: 'animation', name: 'Анимация' },
-            { id: 'transform-gizmo', name: 'Перемещение' },
-            { id: 'camera-background', name: 'Камера AR' },
-            { id: 'montage', name: 'Монтаж (отчёт)' }
-        ];
+        // Авто-обнаружение: список плагинов больше не захардкожен здесь.
+        // Источник истины — реестр plugins/registry.js (через PluginManager).
+        // Каждый плагин может декларировать meta.description для подсказки.
+        // Поле modules используется, чтобы показать, к каким модулям плагин
+        // привязан (3D / 2D / оба).
+        const allPlugins = PluginManager.getAllPlugins();
+        if (allPlugins.length === 0) {
+            table.innerHTML = `<div class="plugin-table-empty">Нет зарегистрированных плагинов.</div>`;
+            return;
+        }
+
+        // Стабильный порядок вывода: 3D-плагины, затем 2D, затем кросс-модульные.
+        const _rank = (mods) => {
+            if (mods.includes('*')) return 3;
+            if (mods.length > 1) return 2; // кросс-модульный
+            if (mods.includes('2d-viewer')) return 1;
+            return 0;
+        };
+        const knownPlugins = allPlugins
+            .map(p => ({
+                id: p.id,
+                name: p.name,
+                description: p.meta?.description || '',
+                modules: p.modules || [],
+                autoStartDefault: p.meta?.autoStart === true,
+            }))
+            .sort((a, b) => {
+                const ra = _rank(a.modules), rb = _rank(b.modules);
+                if (ra !== rb) return ra - rb;
+                return a.name.localeCompare(b.name, 'ru');
+            });
+
+        const _moduleBadge = (mods) => {
+            if (!mods || mods.length === 0) return '<span class="plugin-mod-badge mod-none">нет привязки</span>';
+            if (mods.includes('*')) return '<span class="plugin-mod-badge mod-all">все модули</span>';
+            return mods.map(m => {
+                const label = m === '3d-viewer' ? '3D' : m === '2d-viewer' ? '2D' : m;
+                return `<span class="plugin-mod-badge mod-${m}">${label}</span>`;
+            }).join('');
+        };
 
         const header = document.createElement('div');
         header.className = 'plugin-table-header';
         header.innerHTML = `
-            <span class="plugin-table-name"></span>
+            <span class="plugin-table-name">Плагин</span>
             <div class="plugin-table-checks">
                 <span class="plugin-table-col-title">Вкл</span>
                 <span class="plugin-table-col-title">Авто</span>
@@ -516,7 +566,11 @@ export const SettingsManager = {
             const row = document.createElement('div');
             row.className = 'plugin-table-row' + (!isEnabled ? ' disabled' : '');
             row.innerHTML = `
-                <span class="plugin-table-name">${p.name}</span>
+                <span class="plugin-table-name">
+                    <span class="plugin-table-name-label">${p.name}</span>
+                    <span class="plugin-table-badges">${_moduleBadge(p.modules)}</span>
+                    ${p.description ? `<span class="plugin-table-desc">${p.description}</span>` : ''}
+                </span>
                 <div class="plugin-table-checks">
                     <label class="plugin-table-check" title="Включён">
                         <input type="checkbox" data-plugin-id="${p.id}" data-role="enabled" ${isEnabled ? 'checked' : ''}>
@@ -547,8 +601,14 @@ export const SettingsManager = {
                     cbAutostart.disabled = false;
                 }
 
+                // Применяем ко ВСЕМ контролам UI всех модулей, к которым
+                // привязан плагин: 3D-док и 2D-док должны одновременно
+                // отреагировать на включение/выключение.
                 if (window._pluginUIController) {
                     window._pluginUIController.togglePluginEnabled(p.id, enabled);
+                }
+                if (window._pluginUIController2d) {
+                    window._pluginUIController2d.togglePluginEnabled(p.id, enabled);
                 }
             });
 

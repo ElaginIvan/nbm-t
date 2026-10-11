@@ -248,7 +248,8 @@ PluginManager.register({
     id: 'animation',
     name: 'Анимация',
     icon: 'play',
-    module: '3d-viewer',
+    // module — не указывается; привязку к модулю задаёт администратор
+    // в js/plugins/registry.js через PluginManager.bindModules().
 
     /** Кнопка показывается только если в модели есть анимации. */
     condition: (api) => {

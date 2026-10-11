@@ -1176,6 +1176,23 @@ function _snapToElement(point, mesh) {
     if (checkV) return vRes; if (checkE) return eRes; return fRes;
 }
 
+// [Патч 2026-10-08] Попадание на отсекаемой стороне сечения (плагин cutting-3d)?
+// Clipping planes режут геометрию ТОЛЬКО при рендере — raycaster про них не знает
+// и ловит отрезанную часть модели. Плоскости берём из материала самого меша: это
+// ровно те planes, которыми объект отрисован, поэтому фильтр всегда согласован
+// с картинкой на экране. eps = 0.1 мм — страховка от численного шума на границе.
+function _hitClippedBySection(hit) {
+    const mats = Array.isArray(hit.object.material) ? hit.object.material : [hit.object.material];
+    for (let mi = 0; mi < mats.length; mi++) {
+        const planes = mats[mi] && mats[mi].clippingPlanes;
+        if (!planes || planes.length === 0) continue;
+        for (let i = 0; i < planes.length; i++) {
+            if (planes[i].distanceToPoint(hit.point) < -1e-4) return true;
+        }
+    }
+    return false;
+}
+
 function _findSnapElement(ev) {
     const rect = _renderer.domElement.getBoundingClientRect();
     _mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
@@ -1184,7 +1201,12 @@ function _findSnapElement(ev) {
     // recursive=false: иначе raycaster попадает в дочерние LineSegments рёбер вместо меша.
     // Фильтр isMesh — защитный пояс на случай вложенных мешей.
     const allHits = _raycaster.intersectObjects(_meshObjects, false);
-    const hits = allHits.filter(h => h.object.isMesh);
+    const hits = allHits.filter(h => {
+        if (!h.object.isMesh) return false;
+        for (let o = h.object; o; o = o.parent) { if (o.visible === false) return false; }
+        if (_hitClippedBySection(h)) return false;
+        return true;
+    });
     return hits.length > 0 ? _snapToElement(hits[0].point, hits[0].object) : null;
 }
 
@@ -1471,7 +1493,8 @@ PluginManager.register({
     id: 'measure',
     name: 'Измерение',
     icon: 'square_foot',
-    module: '3d-viewer',
+    // module — не указывается; привязку к модулю задаёт администратор
+    // в js/plugins/registry.js через PluginManager.bindModules().
 
     /**
      * Кнопка плагина показывается только если модель уже загружена.

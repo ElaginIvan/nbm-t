@@ -3,9 +3,14 @@
  * Единая система управления плагинами для всех модулей (3D, 2D и т.д.)
  *
  * Архитектура:
- * - PluginManager.register() — регистрация плагина (делается в файле плагина)
- * - PluginManager.registerModuleAPI() — модуль предоставляет свой API
- * - PluginManager.initUI(container, moduleId) — создание док-панели + контейнера панелей
+ * - PluginManager.register()       — плагин декларирует себя (id, name, icon, init, …).
+ *                                     Плагин НЕ указывает к какому модулю относится —
+ *                                     это ответственность администратора в реестре.
+ * - PluginManager.bindModules(map) — администратор в js/plugins/registry.js указывает,
+ *                                     какой плагин к какому модулю (или модулям) подключается.
+ *                                     '*' — плагин доступен во всех модулях.
+ * - PluginManager.registerModuleAPI() — модуль предоставляет свой API.
+ * - PluginManager.initUI(container, moduleId) — создание док-панели + контейнера панелей.
  *
  * Управление плагинами:
  * - localStorage ключи:
@@ -289,6 +294,10 @@ const _plugins = new Map();
 const _moduleAPIs = new Map();
 const _moduleInstances = new Map(); // 'moduleId:pluginId' -> { cleanup, panelUnmount, toolbarEl }
 
+// Карта привязок: pluginId -> array of moduleId ('*' = любой модуль).
+// Заполняется администратором через PluginManager.bindModules() в js/plugins/registry.js.
+const _moduleBindings = new Map();
+
 // Плагины, переведённые в фоновый режим (пауза взаимодействий).
 // Общий контракт для плагинов: слушатели на window/document (которые
 // plugin-system не снимает) обязаны проверять PluginManager.isPluginPaused(id).
@@ -296,15 +305,55 @@ const _pausedPlugins = new Set();
 
 const PluginManager = {
 
+    /**
+     * Зарегистрировать плагин.
+     * Плагин декларирует только свою идентичность и поведение:
+     *   { id, name, icon, init, destroy?, condition?, panel?, meta? }
+     * Привязка к модулю НЕ делается здесь — её делает администратор
+     * через PluginManager.bindModules() в реестре plugins/registry.js.
+     *
+     * Обратная совместимость: если плагин всё же передал поле `module`
+     * (старый код), оно будет использовано как дефолтная привязка,
+     * но bindModules() имеет приоритет.
+     */
     register(config) {
         if (!config.id) throw new Error('Plugin must have an id');
         if (_plugins.has(config.id)) {
             console.warn(`[PluginManager] Plugin "${config.id}" is already registered. Overwriting.`);
         }
-        _plugins.set(config.id, {
-            ...config,
-            module: Array.isArray(config.module) ? config.module : [config.module],
-        });
+        const legacyModule = config.module;
+        _plugins.set(config.id, { ...config });
+        // Лэгаси: если плагин сам указал module — сохраняем как дефолтную привязку.
+        // bindModules() в реестре имеет приоритет и переопределит это.
+        if (legacyModule && !_moduleBindings.has(config.id)) {
+            _moduleBindings.set(config.id,
+                Array.isArray(legacyModule) ? [...legacyModule] : [legacyModule]);
+        }
+    },
+
+    /**
+     * Привязать плагины к модулям (вызывается администратором в plugins/registry.js).
+     * @param {Object} map — { pluginId: moduleId | moduleId[] | '*' }
+     * Пример:
+     *   PluginManager.bindModules({
+     *     'cutting-3d':  ['3d-viewer'],
+     *     'shared-x':    ['3d-viewer', '2d-viewer'],   // кросс-модульный плагин
+     *     'dev-helpers': '*'                           // доступен везде
+     *   });
+     */
+    bindModules(map) {
+        if (!map || typeof map !== 'object') return;
+        for (const [pluginId, modules] of Object.entries(map)) {
+            if (modules === '*') {
+                _moduleBindings.set(pluginId, ['*']);
+            } else if (Array.isArray(modules)) {
+                _moduleBindings.set(pluginId, [...modules]);
+            } else if (typeof modules === 'string') {
+                _moduleBindings.set(pluginId, [modules]);
+            } else {
+                console.warn(`[PluginManager] bindModules: некорректная привязка для "${pluginId}"`, modules);
+            }
+        }
     },
 
     registerModuleAPI(moduleId, api) {
@@ -333,12 +382,36 @@ const PluginManager = {
 
     getPluginsForModule(moduleId) {
         const result = [];
-        for (const [, plugin] of _plugins) {
-            if (plugin.module.includes(moduleId) || plugin.module.includes('*')) {
+        for (const [pluginId, plugin] of _plugins) {
+            const bindings = _moduleBindings.get(pluginId);
+            if (!bindings) continue;                 // плагин не привязан ни к одному модулю
+            if (bindings.includes('*') || bindings.includes(moduleId)) {
                 result.push(plugin);
             }
         }
         return result;
+    },
+
+    /**
+     * Все зарегистрированные плагины (для панели настроек и т.д.).
+     * Возвращает массив с дополнительным полем modules — список привязанных модулей.
+     */
+    getAllPlugins() {
+        const result = [];
+        for (const [pluginId, plugin] of _plugins) {
+            result.push({
+                ...plugin,
+                modules: _moduleBindings.get(pluginId) || [],
+            });
+        }
+        return result;
+    },
+
+    /**
+     * Список модулей, к которым привязан плагин.
+     */
+    getModuleIdsForPlugin(pluginId) {
+        return _moduleBindings.get(pluginId) || [];
     },
 
     /**
@@ -441,7 +514,9 @@ const PluginManager = {
             return _origContainerAppend.call(this, child);
         };
 
-        /** Пауза: убрать canvas-слушатели + заблокировать pointer-events на оверлеях */
+        /** Пауза: убрать canvas-слушатели + заблокировать pointer-events на оверлеях.
+         *  Также зовёт panel.onPause — плагин закрывает свои всплывающие формы/диалоги,
+         *  чтобы они не оставались открытыми поверх тулбара другого плагина. */
         function _pausePluginInteractions(pluginId) {
             _pausedPlugins.add(pluginId);
             if (_canvas && _origCanvasRemove) {
@@ -458,9 +533,18 @@ const PluginManager = {
                     if (el.classList) el.classList.add('plugin-overlay-paused');
                 }
             }
+            // Закрываем всплывающие формы плагина (сводка монтажа, точный ввод гизмо,
+            // панели солнца/стен/цвета view-display и т.д.).
+            const instance = _moduleInstances.get(`${moduleId}:${pluginId}`);
+            if (typeof instance?.panelPause === 'function') {
+                try { instance.panelPause(); } catch (e) { console.warn(`[plugins] onPause(${pluginId}) failed:`, e); }
+            }
         }
 
-        /** Возобновление: вернуть canvas-слушатели + снять блокировку с оверлеев */
+        /** Возобновление: вернуть canvas-слушатели + снять блокировку с оверлеев.
+         *  Также зовёт panel.onResume — плагин возвращает то, что спрятал в onPause
+         *  (например, 3D-гизмо), чтобы при возврате в активное состояние плагин
+         *  оставался самодостаточным. */
         function _resumePluginInteractions(pluginId) {
             _pausedPlugins.delete(pluginId);
             if (_canvas && _origCanvasAdd) {
@@ -476,6 +560,13 @@ const PluginManager = {
                 for (const el of overlays) {
                     if (el.classList) el.classList.remove('plugin-overlay-paused');
                 }
+            }
+            // Восстанавливаем визуальное состояние плагина (гизмо, траектория и т.д.).
+            // Вызывается ПОСЛЕ снятия паузы — чтобы плагин мог корректно опросить
+            // PluginManager.isPluginPaused() из onResume и получить false.
+            const instance = _moduleInstances.get(`${moduleId}:${pluginId}`);
+            if (typeof instance?.panelResume === 'function') {
+                try { instance.panelResume(); } catch (e) { console.warn(`[plugins] onResume(${pluginId}) failed:`, e); }
             }
         }
 
@@ -606,6 +697,14 @@ const PluginManager = {
             const instance = {
                 cleanup: typeof cleanup === 'function' ? cleanup : null,
                 panelUnmount: typeof plugin.panel?.onUnmount === 'function' ? plugin.panel.onUnmount : null,
+                // onPause: вызывается при переключении на другой плагин (плагин уходит в фон).
+                // Здесь плагин должен закрыть свои всплывающие формы/диалоги —
+                // иначе они останутся открытыми поверх чужого тулбара.
+                panelPause: typeof plugin.panel?.onPause === 'function' ? plugin.panel.onPause : null,
+                // onResume: вызывается при возврате плагина из фона в активное состояние.
+                // Здесь плагин должен восстановить то, что было скрыто в onPause
+                // (например, 3D-гизмо), чтобы сохранить самодостаточность при возврате.
+                panelResume: typeof plugin.panel?.onResume === 'function' ? plugin.panel.onResume : null,
                 toolbarEl,
             };
             _moduleInstances.set(instanceKey, instance);

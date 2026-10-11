@@ -888,7 +888,7 @@ function _ensurePanel() {
 
         <div class="montage-chips" id="montage-chips"></div>
 
-        <div class="montage-section-title">Кисть — исполнитель и дата</div>
+        <div class="montage-section-title">Исполнитель и дата</div>
         <div class="montage-attrs">
             <label class="montage-field">
                 <span>Исполнитель</span>
@@ -902,14 +902,6 @@ function _ensurePanel() {
             </label>
         </div>
         <div class="montage-hint">Подставляются к отметкам при окраске кистями</div>
-
-        <div class="montage-section-title">Режим отображения</div>
-        <div class="montage-modes" id="montage-modes">
-            <button type="button" data-mode="all">Всё</button>
-            <button type="button" data-mode="hide-installed">Без смонтированных</button>
-            <button type="button" data-mode="only-installed">Только смонтированные</button>
-            <button type="button" data-mode="ghost">Призрак</button>
-        </div>
 
         <div class="montage-section-title">Передача отчёта</div>
         <div class="montage-actions">
@@ -929,11 +921,31 @@ function _ensurePanel() {
             </button>
         </div>
 
-        <div class="montage-section-title">По обозначениям</div>
-        <div class="montage-list" id="montage-list"></div>
+        <div class="montage-accordion" id="montage-acc-list">
+            <button type="button" class="montage-accordion__head" aria-expanded="false" aria-controls="montage-list">
+                <span class="montage-accordion__title">По обозначениям</span>
+                <span class="montage-accordion__count" id="montage-acc-list-count"></span>
+                <svg class="montage-accordion__chevron" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                    <path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <div class="montage-accordion__body">
+                <div class="montage-list" id="montage-list"></div>
+            </div>
+        </div>
 
-        <div class="montage-section-title" id="montage-exec-section" hidden>По исполнителям</div>
-        <div class="montage-list" id="montage-exec-list" hidden></div>
+        <div class="montage-accordion" id="montage-acc-exec">
+            <button type="button" class="montage-accordion__head" aria-expanded="false" aria-controls="montage-exec-list">
+                <span class="montage-accordion__title">По исполнителям</span>
+                <span class="montage-accordion__count" id="montage-acc-exec-count"></span>
+                <svg class="montage-accordion__chevron" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                    <path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <div class="montage-accordion__body">
+                <div class="montage-list" id="montage-exec-list"></div>
+            </div>
+        </div>
 
         <div class="montage-panel__footer">
             <button type="button" class="montage-reset" id="montage-reset-btn">Сбросить все статусы</button>
@@ -941,6 +953,16 @@ function _ensurePanel() {
         </div>
     `;
     _panelsContainer.appendChild(_panelEl);
+
+    // Аккордеоны: клик по шапке разворачивает/сворачивает тело.
+    // Состояние хранится в data-атрибуте и aria-expanded.
+    _panelEl.querySelectorAll('.montage-accordion__head').forEach(head => {
+        head.addEventListener('click', () => {
+            const expanded = head.getAttribute('aria-expanded') === 'true';
+            head.setAttribute('aria-expanded', String(!expanded));
+            head.closest('.montage-accordion').classList.toggle('expanded', !expanded);
+        });
+    });
 
     _panelEl.querySelector('#montage-panel-close').addEventListener('click', () => {
         _closePanel();
@@ -968,15 +990,6 @@ function _ensurePanel() {
         if (!_armedBrush) { _toast('Сначала выберите кисть статуса'); return; }
         const status = _armedBrush === 'erase' ? STATUS.NONE : _armedBrush;
         _paintName(_lastPart.name, status);
-    });
-    _panelEl.querySelector('#montage-modes').addEventListener('click', (e) => {
-        const btn = e.target.closest('button[data-mode]');
-        if (!btn) return;
-        _displayMode = btn.dataset.mode;
-        _scheduleSave();
-        _applyVisuals();
-        _updatePillUI();
-        _updatePanelUI();
     });
 
     // Атрибуты кисти: подставляются к каждой новой отметке
@@ -1006,10 +1019,22 @@ function _openPanel() {
     _ensurePanel();
     if (!_panelEl) return;
     // Панель внутри .plugin-panels (высота 0) — ограничиваем высоту по 3D-контейнеру, иначе обрезается.
+    // На мобильных используем window.innerHeight: он корректно учитывает показ/скрытие URL-бара
+    // браузера в отличие от vh-единиц.
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
     const containerH = _panelsContainer?.parentElement?.clientHeight || 0;
-    if (containerH > 0) {
-        _panelEl.style.maxHeight = Math.max(240, containerH - 84) + 'px';
+    const toolbarH = isMobile ? 56 : 64;
+    const safeTop = 12;
+    let maxH;
+    if (isMobile && window.innerHeight > 0) {
+        // innerHeight живо реагирует на показ/скрытие адресной строки браузера
+        maxH = Math.max(240, window.innerHeight - toolbarH - safeTop - 16);
+    } else if (containerH > 0) {
+        maxH = Math.max(240, containerH - toolbarH - 28);
+    } else {
+        maxH = 620;
     }
+    _panelEl.style.maxHeight = maxH + 'px';
     _panelEl.classList.add('visible');
     _panelEl.scrollTop = 0;
     _updatePanelUI();
@@ -1059,17 +1084,24 @@ function _updatePanelUI() {
 
     const chips = _panelEl.querySelector('#montage-chips');
     if (chips) {
+        // Иконки те же, что на тулбаре плагина: montage-check (Смонтировано),
+        // montage-clock (Запланировано), montage-eraser (Без статуса).
+        const noneCount = stats.total - stats.installed - stats.planned;
         chips.innerHTML = `
-            <span class="montage-chip montage-chip--installed"><i></i>Смонтировано: <b>${stats.installed}</b></span>
-            <span class="montage-chip montage-chip--planned"><i></i>Запланировано: <b>${stats.planned}</b></span>
-            <span class="montage-chip"><i></i>Без статуса: <b>${stats.total - stats.installed - stats.planned}</b></span>
+            <span class="montage-chip montage-chip--installed" title="Смонтировано: ${stats.installed}">
+                <svg><use xlink:href="assets/icons/sprite.svg#montage-check"></use></svg>
+                <b>${stats.installed}</b>
+            </span>
+            <span class="montage-chip montage-chip--planned" title="Запланировано: ${stats.planned}">
+                <svg><use xlink:href="assets/icons/sprite.svg#montage-clock"></use></svg>
+                <b>${stats.planned}</b>
+            </span>
+            <span class="montage-chip montage-chip--none" title="Без статуса: ${noneCount}">
+                <svg><use xlink:href="assets/icons/sprite.svg#montage-eraser"></use></svg>
+                <b>${noneCount}</b>
+            </span>
         `;
     }
-
-    // Сегменты режимов
-    _panelEl.querySelectorAll('#montage-modes button').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.mode === _displayMode);
-    });
 
     // Кнопка «все одинаковые»
     const sameBtn = _panelEl.querySelector('#montage-same-btn');
@@ -1088,9 +1120,11 @@ function _updatePanelUI() {
 
     // Список по обозначениям
     const list = _panelEl.querySelector('#montage-list');
+    const listCountEl = _panelEl.querySelector('#montage-acc-list-count');
     if (list) {
         if (!stats.byName.length) {
             list.innerHTML = '<div class="montage-list__empty">Модель ещё не загружена</div>';
+            if (listCountEl) listCountEl.textContent = '';
         } else {
             list.innerHTML = stats.byName.map(rec => {
                 let dotClass = '';
@@ -1111,6 +1145,7 @@ function _updatePanelUI() {
                     </div>
                 `;
             }).join('');
+            if (listCountEl) listCountEl.textContent = `${stats.byName.length} поз.`;
         }
     }
 
@@ -1131,17 +1166,18 @@ function _updatePanelUI() {
             .map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
     }
 
-    // Разбивка «По исполнителям»
-    const execSection = _panelEl.querySelector('#montage-exec-section');
+    // Разбивка «По исполнителям»: счётчик в шапке аккордеона; тело раскрыто,
+    // только если есть отмеченные детали (иначе шапка скрывается целиком).
+    const accExec = _panelEl.querySelector('#montage-acc-exec');
+    const execCountEl = _panelEl.querySelector('#montage-acc-exec-count');
     const execList = _panelEl.querySelector('#montage-exec-list');
-    if (execSection && execList) {
+    if (accExec && execList) {
         const marked = stats.installed + stats.planned;
         if (marked === 0) {
-            execSection.hidden = true;
-            execList.hidden = true;
+            accExec.hidden = true;
         } else {
-            execSection.hidden = false;
-            execList.hidden = false;
+            accExec.hidden = false;
+            if (execCountEl) execCountEl.textContent = `${stats.byExecutor.length} исп.`;
             execList.innerHTML = stats.byExecutor.map(er => `
                 <div class="montage-list__row">
                     <span class="montage-dot montage-dot--exec"></span>
@@ -1531,6 +1567,27 @@ function _init(api) {
     window.addEventListener('modelLoaded', onModelLoaded);
     _windowHandlers.push({ el: window, type: 'modelLoaded', handler: onModelLoaded });
 
+    // Окно: resize/orientationchange — пересчитать maxHeight панели, когда на
+    // мобильном браузере показывается/прячется URL-бар (innerHeight меняется).
+    const onResize = () => {
+        if (!_panelEl || !_panelEl.classList.contains('visible')) return;
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        if (!isMobile || window.innerHeight <= 0) return;
+        const toolbarH = 56;
+        const maxH = Math.max(240, window.innerHeight - toolbarH - 28);
+        _panelEl.style.maxHeight = maxH + 'px';
+    };
+    window.addEventListener('resize', onResize);
+    _windowHandlers.push({ el: window, type: 'resize', handler: onResize });
+    window.addEventListener('orientationchange', onResize);
+    _windowHandlers.push({ el: window, type: 'orientationchange', handler: onResize });
+    // VisualViewport (мобильные браузеры): ловит показ/скрытие URL-бара при скролле
+    if (window.visualViewport) {
+        const onVvResize = () => onResize();
+        window.visualViewport.addEventListener('resize', onVvResize);
+        _windowHandlers.push({ el: window.visualViewport, type: 'resize', handler: onVvResize });
+    }
+
     // Store: изоляция детали в спецификации → перекрасить после её изменений
     if (_store) {
         const unsub = _store.subscribe('specification.lastSelectedPart', _onSpecSelectionChanged);
@@ -1575,7 +1632,8 @@ PluginManager.register({
     id: PLUGIN_ID,
     name: 'Монтаж',
     icon: 'montage-clipboard',
-    module: '3d-viewer',
+    // module — не указывается; привязку к модулю задаёт администратор
+    // в js/plugins/registry.js через PluginManager.bindModules().
 
     meta: {
         autoStart: true, // окраска отчёта видна сразу и сохраняется в фоне
@@ -1629,6 +1687,13 @@ PluginManager.register({
             toolbar.querySelector('#montage-panel-btn')?.addEventListener('click', _togglePanel);
 
             _updatePillUI();
+        },
+
+        // При переключении на другой плагин — закрыть сводку и диалоги,
+        // чтобы они не оставались открытыми поверх чужого тулбара.
+        onPause() {
+            _closePanel();
+            _closeModal();
         },
 
         onUnmount() {

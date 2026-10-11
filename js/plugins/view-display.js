@@ -117,6 +117,17 @@ let _cameraLight = null;
 let _gridHelper = null;
 let _shadowPlane = null;
 
+// Сторонние источники света, созданные в engine.js (setupLights):
+// AmbientLight и FillLight «заливают» тень светом, поэтому при opacity=1
+// тень на модели выглядит полупрозрачной (остаётся ~70% освещённости).
+// Чтобы тень на модели визуально соответствовала тени на полу (которая
+// через ShadowMaterial становится полностью чёрной), мы компенсируем
+// эти источники пропорционально shadowOpacity.
+let _ambientLight = null;
+let _ambientLightBaseIntensity = 0;
+let _fillLight = null;
+let _fillLightBaseIntensity = 0;
+
 // === Виртуальные стены (для AR: ловят тень модели, не отбрасывают свою) ===
 // Стена = receiver (ShadowMaterial) + floorLine (золотистая линия на полу).
 // Пол обрезается по границам включённых стен, стены упираются друг в друга
@@ -267,6 +278,12 @@ function _createCameraLight() {
     _cameraLight.shadow.bias = 0;
     _cameraLight.shadow.normalBias = 0.02;
     _cameraLight.shadow.radius = 4;
+    // Плотность тени на мешах модели: по умолчанию 1.0 (полная тень).
+    // Устанавливаем из сохранённого состояния — иначе при первом включении
+    // плагина тень на модели была бы полной (1.0), а на полу — _shadowOpacity.
+    if (typeof _cameraLight.shadow.intensity === 'number') {
+        _cameraLight.shadow.intensity = _shadowOpacity;
+    }
     _api.scene.add(_cameraLight);
     // .target обязательно в сцену — иначе DirectionalLight целит в мировой origin (lookAt no-op).
     _cameraLight.target.position.set(0, 0, 0);
@@ -280,6 +297,65 @@ function _removeCameraLight() {
         _cameraLight.dispose && _cameraLight.dispose();
     }
     _cameraLight = null;
+}
+
+/**
+ * Находим в сцене сторонние источники света (созданные в engine.js setupLights),
+ * которые «заливают» тень на модели светом:
+ *   - AmbientLight (1.4) — равномерный фоновый свет, видимый в тени;
+ *   - DirectionalLight снизу (1.3, position (0,-10,0)) — fillLight, освещает
+ *     нижнюю часть модели и также виден в тени.
+ *
+ * Без компенсации этих источников тень на мешах модели при shadowOpacity=1
+ * остаётся полупрозрачной (остаётся ~70% освещённости), тогда как тень на полу
+ * (через ShadowMaterial) становится полностью чёрной. Это создаёт визуальное
+ * несоответствие, описанное пользователем.
+ *
+ * Решение: при росте shadowOpacity пропорционально уменьшать интенсивность
+ * этих источников, чтобы тень на модели визуально соответствовала тени на полу.
+ * При shadowOpacity=0 — исходная интенсивность; при shadowOpacity=1 — 25%
+ * от исходной (тень становится тёмной, но не абсолютно чёрной — иначе сцена
+ * выглядит неестественно).
+ */
+function _discoverAmbientLights() {
+    if (!_api || !_api.scene) return;
+    _ambientLight = null;
+    _ambientLightBaseIntensity = 0;
+    _fillLight = null;
+    _fillLightBaseIntensity = 0;
+
+    _api.scene.traverse(obj => {
+        if (obj.isAmbientLight && !_ambientLight) {
+            _ambientLight = obj;
+            _ambientLightBaseIntensity = obj.intensity;
+        } else if (obj.isDirectionalLight && obj !== _cameraLight) {
+            // FillLight в engine.js имеет position (0,-10,0) — направление вверх.
+            // Основной DirectionalLight в engine.js имеет position (0,50,0) — направление вниз.
+            // Компенсируем fillLight (тот, что светит снизу), потому что он сильнее
+            // всего «заливает» тень на нижних гранях модели. Основной DirectionalLight
+            // сверху не так критичен — он не заливает тень от _cameraLight, потому что
+            // их направления различны.
+            if (obj.position.y < 0 && !_fillLight) {
+                _fillLight = obj;
+                _fillLightBaseIntensity = obj.intensity;
+            }
+        }
+    });
+}
+
+/**
+ * Коэффициент компенсации фоновых источников света в зависимости от плотности тени.
+ * При shadowOpacity=0 → k=1.0 (без компенсации, исходная яркость).
+ * При shadowOpacity=1 → k=0.25 (яркость падает до 25%, тень становится тёмной).
+ * Нелинейная (квадратичная) кривая: компенсация ощутима только при высоких
+ * значениях плотности, чтобы при 0-30% ползунка сцена оставалась хорошо освещённой.
+ */
+function _ambientCompensation(shadowOpacity) {
+    // k = 1 - opacity^1.5 * 0.75
+    // При opacity=0: k=1.0
+    // При opacity=0.5: k=1 - 0.354*0.75 = 0.735 (близко к исходному)
+    // При opacity=1.0: k=0.25 (тень становится тёмной)
+    return 1.0 - Math.pow(shadowOpacity, 1.5) * 0.75;
 }
 
 // E12: переиспользуемые объекты горячего пути солнца (раньше создавались на каждый вызов).
@@ -420,11 +496,33 @@ function _updateSunPosition() {
 }
 
 function _applyShadowOpacity() {
+    // 1. Тень на полу и стенах: это отдельные плоскости с ShadowMaterial,
+    //    их прозрачность регулируется через material.opacity.
     if (_shadowPlane?.material) _shadowPlane.material.opacity = _shadowOpacity;
-    // Применяем ту же плотность к receiver-плоскостям стен.
     for (const id of ['back', 'right', 'left']) {
         if (_walls[id]?.receiver?.material) _walls[id].receiver.material.opacity = _shadowOpacity;
     }
+    // 2. Тень на самой модели (мешы с receiveShadow:true): её плотность
+    //    определяется не материалом меша, а интенсивностью тени в shadow map.
+    //    Начиная с three.js r155 у LightShadow появилось свойство `intensity`
+    //    (по умолчанию 1.0) — оно управляет mix(1.0, shadow, intensity) в шейдере
+    //    и применяется ко всем объектам, получающим тень, включая саму модель.
+    //    Именно поэтому ранее ползунок «Плотность» менял тень на полу, но не
+    //    менял тень, которую модель бросает сама на себя (на своих мешах).
+    if (_cameraLight?.shadow) {
+        _cameraLight.shadow.intensity = _shadowOpacity;
+    }
+    // 3. Компенсация фоновых источников света (AmbientLight, FillLight):
+    //    при shadowOpacity=1 тень на модели через shadow.intensity становится
+    //    «математически полной», но визуально остаётся полупрозрачной, потому
+    //    что AmbientLight и FillLight заливают тень светом (~70% освещённости).
+    //    Уменьшаем их пропорционально, чтобы тень на модели стала сравнимо
+    //    тёмной с тенью на полу. Используем нелинейную кривую, чтобы при малых
+    //    значениях ползунка (0-30%) компенсация была минимальной и сцена
+    //    оставалась хорошо освещённой.
+    const k = _ambientCompensation(_shadowOpacity);
+    if (_ambientLight) _ambientLight.intensity = _ambientLightBaseIntensity * k;
+    if (_fillLight)    _fillLight.intensity    = _fillLightBaseIntensity    * k;
 }
 
 // ============================================================
@@ -1034,6 +1132,9 @@ function _setShadowElevation(deg) {
 function _setShadowOpacity(val) {
     _shadowOpacity = THREE.MathUtils.clamp(val, OPACITY_MIN, OPACITY_MAX);
     _applyShadowOpacity();
+    // Карта теней не пересчитывается (тень та же) — но uniforms shadowIntensity
+    // у шейдера мешей меняется через _applyShadowOpacity(), поэтому достаточно
+    // одного рендера кадра, чтобы увидеть результат.
     _renderOnce();
     _updateSunPanelUI();
     _saveState();
@@ -1991,6 +2092,12 @@ function _init(api) {
     _createGrid();
     _createEdges();
 
+    // 2a. Находим сторонние источники света (созданы в engine.js setupLights),
+    // чтобы компенсировать их при изменении плотности тени.
+    // Без этого AmbientLight и FillLight «заливают» тень светом, и она
+    // остаётся полупрозрачной даже при shadowOpacity=1.
+    _discoverAmbientLights();
+
     // 3. Применяем настройки
     _applyShadowOpacity();
     _updateSunPosition();
@@ -2048,6 +2155,20 @@ function _cleanup() {
     _removeGrid();
     _removeEdges();
 
+    // Восстанавливаем исходные интенсивности фоновых источников света,
+    // которые мы компенсировали в _applyShadowOpacity. Иначе при деактивации
+    // плагина сцена осталась бы затемнённой.
+    if (_ambientLight && _ambientLightBaseIntensity > 0) {
+        _ambientLight.intensity = _ambientLightBaseIntensity;
+    }
+    if (_fillLight && _fillLightBaseIntensity > 0) {
+        _fillLight.intensity = _fillLightBaseIntensity;
+    }
+    _ambientLight = null;
+    _ambientLightBaseIntensity = 0;
+    _fillLight = null;
+    _fillLightBaseIntensity = 0;
+
     // Виртуальные стены: distance сбрасываем, иначе при недоступном localStorage
     // модульные переменные переживают ре-инициализацию.
     for (const id of ['back', 'right', 'left']) {
@@ -2087,7 +2208,8 @@ PluginManager.register({
     id: 'view-display',
     name: 'Вид',
     icon: 'image',
-    module: '3d-viewer',
+    // module — не указывается; привязку к модулю задаёт администратор
+    // в js/plugins/registry.js через PluginManager.bindModules().
 
     meta: {
         autoStart: true,
@@ -2163,6 +2285,15 @@ PluginManager.register({
             _updateSunBtnUI();
             _updateSunPanelUI();
             _updateWallBtnUI();
+        },
+
+        // При переключении на другой плагин — закрыть всплывающие панели
+        // (цвет, солнце, стены), чтобы они не оставались открытыми поверх
+        // чужого тулбара. DOM не удаляем — при возврате можно открыть снова.
+        onPause() {
+            _hideColorPanel();
+            _hideSunPanel();
+            _hideWallPanel();
         },
 
         onUnmount() {

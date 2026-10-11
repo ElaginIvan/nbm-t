@@ -1,0 +1,121 @@
+/* ============================================================
+ * 2D Annotations Plugin — липкие текстовые заметки (2D-only).
+ * ============================================================
+ * Тулбар: кнопки «Заметка» / «Очистить».
+ * Заметки — это absolutely-positioned div-ы поверх .drawing-wrapper.
+ */
+
+.ann-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    background: rgba(20, 22, 30, 0.92);
+    color: #fff;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    min-width: 240px;
+}
+
+.ann-toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+}
+
+.ann-btn {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: #ddd;
+    border-radius: 8px;
+    cursor: pointer;
+    font: 500 13px/1 system-ui, sans-serif;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.ann-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+.ann-btn:active { transform: scale(0.96); }
+.ann-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+.ann-btn.is-active {
+    background: rgba(255, 224, 102, 0.25);
+    border-color: rgba(255, 224, 102, 0.7);
+    color: #fff;
+}
+
+/* ============================================================
+ * Слой заметок поверх .drawing-wrapper
+ * ============================================================
+ */
+
+.ann-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 6;
+}
+.ann-layer .ann-note {
+    pointer-events: auto;
+}
+
+.ann-note {
+    position: absolute;
+    transform: translate(-6px, -6px);
+    min-width: 120px;
+    max-width: 220px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    color: #1a1c26;
+    font: 13px/1.4 system-ui, sans-serif;
+    cursor: pointer;
+    user-select: none;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+}
+.ann-note-text {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+.ann-note-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 4px;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+.ann-note:hover .ann-note-actions {
+    opacity: 1;
+}
+.ann-note-edit,
+.ann-note-del {
+    border: none;
+    background: rgba(0, 0, 0, 0.08);
+    color: #1a1c26;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    cursor: pointer;
+    font: 600 13px/1 system-ui, sans-serif;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+.ann-note-edit:hover { background: rgba(0, 0, 0, 0.2); }
+.ann-note-del:hover { background: rgba(255, 59, 48, 0.4); color: #fff; }

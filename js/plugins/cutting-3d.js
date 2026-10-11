@@ -1,8 +1,21 @@
 /**
- * Плагин: Сечение модели (3D) — drag-версия.
- * Секущая плоскость управляется прямым перетаскиванием: при выборе оси (X/Y/Z)
- * появляется полупрозрачная плоскость, которую можно двигать мышкой или пальцем.
- * Stencil-сечение + cap-плоскости. Метки [FIX-XXX-N] в коде — точки патчей производительности/артефактов.
+ * Плагин: Сечение модели (3D) — Drag-версия (patched)
+ *
+ * Секущая плоскость управляется прямым перетаскиванием на модели,
+ * а не ползунком. При выборе оси (X/Y/Z) появляется полупрозрачная
+ * цветная плоскость, которую можно двигать мышкой или пальцем.
+ *
+ * Сохранена вся логика stencil-сечений и cap-плоскостей из оригинала.
+ * Изменён только UI и способ управления позицией сечения.
+ *
+ * ПАТЧИ (отмечены [FIX-XXX-N] в коде):
+ *   [FIX-PERF-1] Share stencil-материалы на ось (было N клонов на пару)
+ *   [FIX-PERF-2] needsUpdate=true только при смене количества plane'ов
+ *   [FIX-PERF-3] Share клонов материалов модели (было 1012 клонов, теперь 1)
+ *   [FIX-PERF-4] Убрать dithering:true из клонов (лишний shader variant)
+ *   [FIX-ART-1]  polygonOffset на cap-материале против z-fighting
+ *   [FIX-ART-2]  up=(0,0,1) для Y-оси против degenerate lookAt
+ *   [FIX-ART-3]  Сдвиг cap вдоль нормали на ε (страховка от z-fighting)
  */
 
 import * as THREE from 'three';
@@ -400,21 +413,35 @@ function isEffectivelyVisible(node) {
 
 function syncPartVisibility() {
     if (!_store.getState('cutting3d.isActive')) return;
+    let changed = false;
     registeredMeshes.forEach(node => {
         const stencilMeshes = meshToStencilMeshes.get(node);
         if (!stencilMeshes) return;
         const visible = isEffectivelyVisible(node);
         for (let i = 0; i < stencilMeshes.length; i++) {
-            stencilMeshes[i].visible = visible;
+            if (stencilMeshes[i].visible !== visible) {
+                stencilMeshes[i].visible = visible;
+                changed = true;
+            }
         }
     });
+    // Пробуждаем рендер-цикл вьювера: cap-плоскость перерисуется сразу,
+    // а не на следующем idle-кадре (1 fps в простое — на большой модели
+    // видна задержка до 1 секунды между скрытием детали и пропаданием заглушки).
+    if (changed) window.dispatchEvent(new Event('viewer-activity'));
 }
 
 function startVisibilitySync() {
     if (_unsubscribeVisibility !== null || !_store) return;
-    _unsubscribeVisibility = _store.subscribe('specification.lastSelectedPart', () => {
-        syncPartVisibility();
-    });
+    // Слушаем window-событие model-visibility-changed — оно диспатчится
+    // ПОСЛЕ фактического изменения visible у мешей (см. _visibilityChanged
+    // в specification.js / cutting.js / montage.js). Store-событие
+    // 'specification.lastSelectedPart' стреляет ДО скрытия мешей → гонка
+    // и «пробки» от скрытых деталей на cap-плоскости.
+    window.addEventListener('model-visibility-changed', syncPartVisibility);
+    _unsubscribeVisibility = () => {
+        window.removeEventListener('model-visibility-changed', syncPartVisibility);
+    };
 }
 
 function stopVisibilitySync() {
@@ -853,7 +880,8 @@ PluginManager.register({
     id: 'cutting-3d',
     name: 'Сечение',
     icon: 'slice-fill',
-    module: '3d-viewer',
+    // module — не указывается; привязку к модулю задаёт администратор
+    // в js/plugins/registry.js через PluginManager.bindModules().
 
     condition: (api) => !!(api && api.model && api.scene),
 

@@ -1,6 +1,8 @@
 /**
  * 3D Viewer Module — рендеринг 3D-сцены.
- * Подмодули: engine.js. Плагины: cutting-3d, measure, animation, center-of-mass, transform-gizmo, camera-background, view-display, montage.
+ * Подмодули: engine.js. Плагины подключаются централизованно через реестр
+ * (см. js/plugins/registry.js) — здесь нужен только один импорт реестра,
+ * а не отдельный импорт под каждый плагин.
  */
 
 import * as THREE from 'three';
@@ -13,15 +15,10 @@ import {
     handleWindowResize, initResizeListener
 } from './engine.js';
 
-// Плагины 3D-модуля (импорт регистрирует их в PluginManager)
-import './plugins/cutting-3d.js';
-import './plugins/measure.js';
-import './plugins/animation.js';
-import './plugins/center-of-mass.js';
-import './plugins/transform-gizmo.js';
-import './plugins/camera-background.js';
-import './plugins/view-display.js';
-import './plugins/montage.js';
+// Единый импорт реестра: регистрирует все доступные плагины и устанавливает
+// их привязки к модулям (карта pluginId → moduleId в самом registry.js).
+// Администратор решает, какие плагины подключаются к этому модулю.
+import './plugins/registry.js';
 
 function getModelPath() {
     return document.getElementById('project-data')?.getAttribute('data-model-path') || '';
@@ -50,7 +47,7 @@ let _dblClickHandler = null;
 const ACTIVE_FPS = 60, IDLE_FPS = 1;
 const ACTIVE_MS = 1000 / ACTIVE_FPS, IDLE_MS = 1000 / IDLE_FPS;
 const IDLE_DELAY = 2000;
-const ACTIVITY_EVENTS = ['pointerdown','pointermove','pointerup','wheel','keydown','touchstart','touchmove'];
+const ACTIVITY_EVENTS = ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'touchstart', 'touchmove'];
 
 let _rafId = null;
 let _lastFrame = 0;
@@ -133,6 +130,10 @@ function hideLoadingIndicator() {
 
 function _registerModuleAPI() {
     PluginManager.registerModuleAPI('3d-viewer', {
+        // Идентификатор модуля — нужен кросс-модульным плагинам, чтобы
+        // определять, в каком модуле они сейчас работают (3D или 2D),
+        // и адаптировать поведение.
+        get moduleId() { return '3d-viewer'; },
         get scene() { return scene; },
         get camera() { return camera; },
         get renderer() { return renderer; },
@@ -275,6 +276,23 @@ let _selectedPart = null;
 let _savedColors = null;
 let _pointerDownPos = null;
 
+// [Патч 2026-10-08] Попадание на отсекаемой стороне сечения (плагин cutting-3d)?
+// Clipping planes режут геометрию ТОЛЬКО при рендере — raycaster про них не знает
+// и ловит отрезанную часть модели. Плоскости берём из материала самого меша: это
+// ровно те planes, которыми объект отрисован, поэтому фильтр всегда согласован
+// с картинкой на экране. eps = 0.1 мм — страховка от численного шума на границе.
+function _hitClippedBySection(hit) {
+    const mats = Array.isArray(hit.object.material) ? hit.object.material : [hit.object.material];
+    for (let mi = 0; mi < mats.length; mi++) {
+        const planes = mats[mi] && mats[mi].clippingPlanes;
+        if (!planes || planes.length === 0) continue;
+        for (let i = 0; i < planes.length; i++) {
+            if (planes[i].distanceToPoint(hit.point) < -1e-4) return true;
+        }
+    }
+    return false;
+}
+
 function _isViewerFree() {
     return !window._pluginUIController?.getActivePluginId();
 }
@@ -317,9 +335,14 @@ function _onCanvasPointerUp(e) {
 
     const rect = renderer.domElement.getBoundingClientRect();
     _ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1,
-             -((e.clientY - rect.top) / rect.height) * 2 + 1);
+        -((e.clientY - rect.top) / rect.height) * 2 + 1);
     _raycaster.setFromCamera(_ndc, camera);
-    const hit = _raycaster.intersectObject(model, true).find(h => h.object.isMesh);
+    const hit = _raycaster.intersectObject(model, true).find(h => {
+        if (!h.object.isMesh) return false;
+        for (let o = h.object; o; o = o.parent) { if (o.visible === false) return false; }
+        if (_hitClippedBySection(h)) return false;
+        return true;
+    });
     if (hit) _selectPart(hit); else _deselect();
 }
 

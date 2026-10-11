@@ -632,3 +632,14 @@
 }
 /* Закомментированный блок остатков рефакторинга (.view-toggle-button svg,
    @media hover:none) удалён */
+
+/* ====================== Множественный выбор (multi-select) ====================== */
+
+.part-row.multi-active {
+    background-color: rgba(255, 149, 0, 0.18) !important;
+    border-left: 3px solid #ff9500;
+}
+.part-row.multi-active td:first-child {
+    font-weight: 600;
+    color: #ff9500;
+}

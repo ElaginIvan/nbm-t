@@ -1,13 +1,23 @@
 /**
  * 2D Viewer Module — просмотр 2D-чертежей.
+ * Патч 2026-10-07 (v2): сохранение мультивыбора при переходе в 2D.
  * ZoomManager: зум и панорамирование.
  * UIManager: переключение 3D/2D, навигация по листам.
  * DrawingLoader: загрузка чертежей с кэшированием.
  * InputHandlers: мышь, тач, колесо.
+ *
+ * Плагинная система: как и в 3D-модуле, плагины подключаются централизованно
+ * через реестр js/plugins/registry.js. Реестр импортируется один раз —
+ * он регистрирует все доступные плагины и их привязки к модулям.
  */
 
 import { store, escapeHtml } from './app.js';
 import PluginManager from './plugin-system.js';
+
+// Единый импорт реестра плагинов (идемпотентен: при повторном импорте
+// браузер использует кэш модуля, регистрации и привязки выполняются
+// только один раз за загрузку страницы).
+import './plugins/registry.js';
 
 // ============================================================
 // ZOOM MANAGER
@@ -241,6 +251,12 @@ const DrawingLoader = {
             imageElement.src = img.src;
             imageElement.style.display = 'block';
             placeholder.style.display = 'none';
+            // Уведомляем 2D-плагины (если в реестре зарегистрированы):
+            // сменился чертёж — нужно перерисовать overlays и, возможно,
+            // восстановить сохранённые для этого листа пометки.
+            window.dispatchEvent(new CustomEvent('drawingChanged', {
+                detail: { designation: drawing.name, path: drawing.path }
+            }));
         };
         img.onerror = () => {
             placeholder.innerHTML = `
@@ -279,6 +295,14 @@ const DrawingLoader = {
             imageElement.style.display = 'block';
             placeholder.style.display = 'none';
             UIManager.updateDrawingIndicator(this);
+            // Сменился лист — уведомляем 2D-плагины.
+            window.dispatchEvent(new CustomEvent('drawingChanged', {
+                detail: {
+                    designation: this.currentDrawings.designation,
+                    sheet: index + 1,
+                    path: drawing.path,
+                }
+            }));
         };
         img.onerror = () => {
             placeholder.innerHTML = `
@@ -506,14 +530,23 @@ const DrawingViewer = {
         }
 
         PluginManager.registerModuleAPI('2d-viewer', {
+            // Идентификатор модуля — нужен кросс-модульным плагинам, чтобы
+            // определять, в каком модуле они сейчас работают (3D или 2D),
+            // и адаптировать поведение.
+            get moduleId() { return '2d-viewer'; },
             get container() { return document.getElementById('drawing-container'); },
             get imageElement() { return document.getElementById('drawing-image'); },
+            get drawingWrapper() { return document.querySelector('.drawing-wrapper'); },
             get zoomManager() { return ZoomManager; },
             get drawingLoader() { return DrawingLoader; },
             get store() { return store; },
         });
 
         this._pluginUI = PluginManager.initUI(container, '2d-viewer');
+        // Сохраняем в глобальной переменной по аналогии с 3D-модулем,
+        // чтобы SettingsManager (ui-managers.js) мог применять включение/
+        // выключение плагинов к обоим докам одновременно.
+        window._pluginUIController2d = this._pluginUI;
     },
 
     _setupCursors() {
@@ -543,7 +576,11 @@ const DrawingViewer = {
 
         document.dispatchEvent(new CustomEvent('viewModeChanged', { detail: { mode: newMode, oldMode } }));
 
-        if (newMode === '2D') {
+        // При активном мультивыборе авто-выбор первой детали не выполняем:
+        // highlightParts() сбросил бы мультивыбор (selectedParts = [],
+        // multiSelectMode = false). Чертёж в мульти-режиме не загружается —
+        // он привязан к одной детали.
+        if (newMode === '2D' && !store.getState('specification.multiSelectMode')) {
             let activeRow = document.querySelector('.part-row.active');
             if (!activeRow) {
                 activeRow = document.querySelector('.part-row');

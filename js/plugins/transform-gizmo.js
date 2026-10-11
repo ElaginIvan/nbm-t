@@ -27,6 +27,7 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let _boundHandlers = [];
 let _toolbarEl = null;      // скоуп-поиск кнопок панели вместо глобальных id
+let _panelsContainer = null; // .plugin-panels — родитель для всплывающих панелей (как в view-display)
 let _cleanedUp = false;     // защита от двойного вызова cleanup+destroy
 let _originalTouchAction = '';
 let _cameraMoved = false;
@@ -47,6 +48,12 @@ let _floatUpdatePending = false;      // коалисция нескольких
 let _floatWorldPos = null;            // переиспользуемый вектор (без аллокаций на событие)
 let _floatDropEl = null;
 let _floatRotEl = null;
+// Фоновый режим: гизмо, траектория и подсветка выделения спрятаны onPause,
+// чтобы не отвлекать поверх чужого плагина. Флаг отличает «спрятали мы» от
+// «пользователь скрыл сам» и гарантирует возврат только того, что прятали.
+// selectedObjects при этом НЕ чистится — выделение как данные переживает паузу,
+// при onResume подсветка восстанавливается по этому списку.
+let _visualsHiddenByPause = false;
 
 // ============================================================
 // Ф1: Точный ввод смещения / поворота
@@ -1211,7 +1218,13 @@ function _createPrecisePanel() {
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M2.5 8.5l3.5 3.5 7.5-8.5"/></svg>
             </button>
         </div>`;
-    document.body.appendChild(_precisePanelEl);
+    // Привязка к .plugin-panels (как vd-sun-panel в view-display): панель живёт
+    // внутри контейнера плагина, позиционируется над тулбаром, а не в document.body.
+    const container = _panelsContainer
+        || document.querySelector('.plugin-panels')
+        || document.getElementById('model-container')
+        || document.body;
+    container.appendChild(_precisePanelEl);
     _preciseInputs = {
         x: _precisePanelEl.querySelector('.axis-x input'),
         y: _precisePanelEl.querySelector('.axis-y input'),
@@ -1374,11 +1387,13 @@ PluginManager.register({
     id: 'transform-gizmo',
     name: 'Перемещение',
     icon: 'cubes',
-    module: '3d-viewer',
+    // module — не указывается; привязку к модулю задаёт администратор
+    // в js/plugins/registry.js через PluginManager.bindModules().
     condition: (pluginApi) => !!(pluginApi && pluginApi.model),
 
     init(pluginApi) {
         _cleanedUp = false;
+        _visualsHiddenByPause = false; // на случай повторного init после destroy в фоне
         scene = pluginApi.scene;
         camera = pluginApi.camera;
         renderer = pluginApi.renderer;
@@ -1490,6 +1505,9 @@ PluginManager.register({
             // с задержкой 200 мс, и document.getElementById может вернуть
             // ЕГО кнопки — обработчики вешались мимо новой панели
             _toolbarEl = toolbar;
+            // Скоуп-контейнер для всплывающих панелей (как в view-display):
+            // панель «Точный ввод» привязывается к .plugin-panels, а не к document.body.
+            _panelsContainer = toolbar?.closest('.plugin-panels') || null;
             const moveBtn = _btnById('gizmo-move-btn');
             const rotBtn = _btnById('gizmo-rotate-btn');
             const preciseBtn = _btnById('gizmo-precise-btn');
@@ -1533,8 +1551,72 @@ PluginManager.register({
             updatePreciseButton(); // Ф1: восстановить состояние кнопки из localStorage
         },
 
+        // При переключении на другой плагин — закрыть панель «Точный ввод»
+        // и спрятать 3D-гизмо + траекторию, чтобы они не висели поверх чужого
+        // активного плагина. Сам режим preciseMode сбрасываем (как при клике
+        // по кнопке), чтобы при возврате панель не висела раскрытой поверх
+        // чужого тулбара. Выделение, режим гизмо (move/rotate) и позиция
+        // сохраняются — плагин остаётся самодостаточным, возврат через onResume.
+        onPause() {
+            if (preciseMode) {
+                preciseMode = false;
+                try {
+                    localStorage.setItem(PRECISE_STORAGE_KEY, '0');
+                } catch (e) { /* noop */ }
+                updatePreciseButton();
+                _syncPrecisePanelMode();
+                _updatePrecisePanel();
+            }
+            // Прячем визуал плагина: 3D-гизмо (helper.visible=false убирает рукоятки,
+            // не трогая attach/detach), траекторию и подсветку выделения (emissive).
+            // Сами selectedObjects НЕ чистим — выделение как данные переживает паузу,
+            // при onResume подсветка восстанавливается по этому списку.
+            if (!_visualsHiddenByPause) {
+                if (transformControls?.object) {
+                    const helper = transformControls.getHelper();
+                    if (helper) helper.visible = false;
+                }
+                if (trailGroup?.visible) trailGroup.visible = false;
+                for (const obj of selectedObjects) unhighlightObject(obj);
+                _visualsHiddenByPause = true;
+            }
+            // На всякий случай прячем и плавающие кнопки (дублирует защиту
+            // через isPluginPaused в _updateFloatingButtons — но onPause зовётся
+            // синхронно, без ожидания rAF).
+            _hideFloatingButtons();
+        },
+
+        // Возврат из фона в активное состояние: показываем гизмо, траекторию и
+        // подсветку выделения обратно. Видимость восстанавливается по источникам
+        // истины:
+        //   helper.visible = true  — гизмо рисуется, если есть attach (иначе всё
+        //                            равно не виден — внутри TransformControls
+        //                            спрячет рукоятки при отсутствии object);
+        //   trailGroup.visible = showTrail — флаг режима «Траектория»;
+        //   highlightObject(obj) для каждого obj из selectedObjects — подсветка
+        //                            emissive возвращается по пережившему паузу списку.
+        // Сами selectedObjects и режим гизмо (move/rotate) не трогаем — они пережили паузу.
+        onResume() {
+            if (_visualsHiddenByPause) {
+                if (transformControls?.object) {
+                    const helper = transformControls.getHelper();
+                    if (helper) helper.visible = true;
+                }
+                if (trailGroup) trailGroup.visible = showTrail;
+                for (const obj of selectedObjects) highlightObject(obj);
+                _visualsHiddenByPause = false;
+            }
+            // Плавающие кнопки и панель точного ввода обновятся по событиям
+            // (isPluginPaused уже false), но проще дернуть обновление явно —
+            // позиция кнопок зависит от текущей камеры/выделения, которые могли
+            // измениться, пока плагин был в фоне.
+            _scheduleFloatingUpdate();
+            _updatePrecisePanel();
+        },
+
         onUnmount() {
             _toolbarEl = null;
+            _panelsContainer = null;
         }
     }
 });

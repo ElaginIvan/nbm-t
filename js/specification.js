@@ -1,10 +1,29 @@
 /**
  * Specification Module — спецификация модели и страница проекта.
- * SpecificationService: извлечение структуры, подсветка деталей, CSV.
+ * Патч 2026-10-07 (v2): сохранение мультивыбора при развороте на весь экран.
+ * SpecificationService: извлечение структуры, подсветка деталей (single/multi), CSV.
  * ProjectPage: инициализация страницы проекта.
+ *
+ * Мульти-выбор: long-press (500 мс) или Ctrl/Cmd+click на строке таблицы
+ * переводит спецификацию в мульти-режим. В нём клики toggle строк, остальные
+ * детали скрываются. Esc или клик мимо таблицы — выход.
  */
 
 import { store, loadCSV, findInCSV, escapeHtml, DataService } from './app.js';
+
+const LONG_PRESS_MS = 500;
+const MOVE_TOLERANCE_PX = 10;
+// Окно подавления «призрачного» клика после жеста мульти-активации
+// (long-press / Ctrl+клик). Призрачный клик приходит от mouseup в первые
+// миллисекунды после отпускания; осознанный клик человека — заметно позже.
+const CLICK_SUPPRESS_MS = 350;
+
+// Метка времени, до которой клики по строкам игнорируются. Нужна потому, что
+// мульти-активация синхронно перестраивает tbody (перерисовка таблицы), исходная
+// строка отсоединяется от DOM, и click от отпускания кнопки браузер может
+// доставить НОВОЙ строке — у той нет локального флага longPressFired, и без
+// подавления тот же жест срабатывает второй раз (toggle назад).
+let _rowClickSuppressedUntil = 0;
 
 // ============================================================
 // SPECIFICATION SERVICE
@@ -14,7 +33,6 @@ function cleanName(name) {
     return name ? name.replace(/:\d+$/, '').trim() : '';
 }
 
-/** Сбрасывает все меши модели в исходное состояние. */
 function _resetAllMeshes(structure) {
     structure.forEach(item => {
         if (!item.threeObjects) return;
@@ -30,7 +48,6 @@ function _resetAllMeshes(structure) {
     });
 }
 
-/** Уведомляет об изменении состава видимых деталей (для перерисовки карты теней). */
 function _visibilityChanged() {
     window.dispatchEvent(new Event('model-visibility-changed'));
 }
@@ -163,6 +180,8 @@ const SpecificationService = {
 
     highlightParts(partName, hideOthers = true) {
         store.setState('specification.lastSelectedPart', partName);
+        store.setState('specification.selectedParts', []);
+        store.setState('specification.multiSelectMode', false);
         const structure = store.getState('specification.structure');
         if (!structure) return;
         _resetAllMeshes(structure);
@@ -181,17 +200,57 @@ const SpecificationService = {
         _visibilityChanged();
     },
 
+    /** Подсвечивает несколько деталей одновременно (мульти-режим). */
+    highlightMultipleParts(partNames) {
+        const names = Array.isArray(partNames) ? partNames.filter(Boolean) : [];
+        store.setState('specification.selectedParts', names);
+        store.setState('specification.multiSelectMode', names.length > 0);
+        if (names.length === 0) store.setState('specification.lastSelectedPart', null);
+
+        const structure = store.getState('specification.structure');
+        if (!structure) return;
+        _resetAllMeshes(structure);
+        if (names.length === 0) { _visibilityChanged(); return; }
+
+        const lowerNames = new Set(names.map(n => n.toLowerCase()));
+        const groupsToShow = structure.filter(item => lowerNames.has(item.name.toLowerCase()));
+        const meshesToShow = new Set();
+        groupsToShow.forEach(g => g.threeObjects?.forEach(o => o.traverse(c => { if (c.isMesh) meshesToShow.add(c); })));
+        structure.forEach(item => {
+            if (!groupsToShow.includes(item) && item.threeObjects) item.threeObjects.forEach(o => o.traverse(c => {
+                if (c.isMesh && !meshesToShow.has(c)) c.visible = false;
+            }));
+        });
+        _visibilityChanged();
+    },
+
     showAllParts() {
         store.setState('specification.lastSelectedPart', null);
+        store.setState('specification.selectedParts', []);
+        store.setState('specification.multiSelectMode', false);
         const structure = store.getState('specification.structure');
         if (structure) _resetAllMeshes(structure);
         _visibilityChanged();
+    },
+
+    /** Toggle одной детали в мульти-режиме. */
+    togglePartInMultiSelection(partName) {
+        if (!partName) return;
+        const current = store.getState('specification.selectedParts') || [];
+        const lower = partName.toLowerCase();
+        const isIn = current.some(n => n.toLowerCase() === lower);
+        const next = isIn
+            ? current.filter(n => n.toLowerCase() !== lower)
+            : [...current, partName];
+        this.highlightMultipleParts(next);
     },
 
     clear() {
         store.setState('specification.structure', []);
         store.setState('specification.csvData', []);
         store.setState('specification.lastSelectedPart', null);
+        store.setState('specification.selectedParts', []);
+        store.setState('specification.multiSelectMode', false);
     }
 };
 
@@ -219,6 +278,13 @@ function renderSpecificationTable(structure) {
         return;
     }
 
+    const selectedParts = store.getState('specification.selectedParts') || [];
+    const lastSelectedPart = store.getState('specification.lastSelectedPart');
+    const multiMode = store.getState('specification.multiSelectMode') || selectedParts.length > 0;
+
+    const lowerSelected = new Set(selectedParts.map(n => n.toLowerCase()));
+    const lowerLast = lastSelectedPart ? lastSelectedPart.toLowerCase() : null;
+
     let html = '';
     structure.forEach((item) => {
         const indent = item.level * 15;
@@ -227,9 +293,18 @@ function renderSpecificationTable(structure) {
         const quantity = item.instanceCount || 1;
         const hasData = csvData ? 'has-data' : 'no-data';
         const iconName = item.children.length > 0 ? 'cubes' : 'cube';
+        const lowerItem = item.name.toLowerCase();
+
+        // В мульти-режиме — multi-active для выбранных; в single-режиме — active для lastSelectedPart.
+        let activeClass = '';
+        if (multiMode) {
+            if (lowerSelected.has(lowerItem)) activeClass = 'multi-active';
+        } else if (lowerLast && lowerItem === lowerLast) {
+            activeClass = 'active';
+        }
 
         html += `
-            <tr class="part-row ${hasData}" data-part-name="${escapeHtml(item.name)}">
+            <tr class="part-row ${hasData} ${activeClass}" data-part-name="${escapeHtml(item.name)}">
                 <td>
                     <div class="part-item" style="padding-left: ${indent}px">
                         <svg class="part-icon" aria-hidden="true">
@@ -252,27 +327,172 @@ function attachTableEventListeners() {
     const partRows = document.querySelectorAll('.part-row');
 
     partRows.forEach(row => {
+        let pressTimer = null;
+        let pressStartPos = null;
+        let longPressFired = false;
+
+        const startPress = (clientX, clientY) => {
+            pressStartPos = { x: clientX, y: clientY };
+            longPressFired = false;
+            if (pressTimer) clearTimeout(pressTimer);
+            pressTimer = setTimeout(() => {
+                longPressFired = true;
+                _handleRowActivate(row, true);
+            }, LONG_PRESS_MS);
+        };
+
+        const cancelPress = (clientX, clientY) => {
+            if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+            if (pressStartPos && (clientX !== undefined)) {
+                const dx = clientX - pressStartPos.x;
+                const dy = clientY - pressStartPos.y;
+                if (dx * dx + dy * dy > MOVE_TOLERANCE_PX * MOVE_TOLERANCE_PX) {
+                    longPressFired = true;
+                }
+            }
+            // Жест завершён, мульти-активация уже выполнена (long-press,
+            // Ctrl+клик или drag) — гасим призрачный click от этого mouseup.
+            if (longPressFired) {
+                _rowClickSuppressedUntil = Date.now() + CLICK_SUPPRESS_MS;
+            }
+            pressStartPos = null;
+        };
+
+        row.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (e.ctrlKey || e.metaKey) {
+                longPressFired = true;
+                e.preventDefault();
+                _handleRowActivate(row, true);
+                return;
+            }
+            startPress(e.clientX, e.clientY);
+        });
+        row.addEventListener('mouseup', (e) => cancelPress(e.clientX, e.clientY));
+        row.addEventListener('mouseleave', () => cancelPress());
+
+        row.addEventListener('touchstart', (e) => {
+            if (e.touches.length !== 1) return;
+            const t = e.touches[0];
+            startPress(t.clientX, t.clientY);
+        }, { passive: true });
+        row.addEventListener('touchend', (e) => {
+            const t = e.changedTouches[0];
+            cancelPress(t?.clientX, t?.clientY);
+        });
+        row.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 1) {
+                const t = e.touches[0];
+                if (pressStartPos) {
+                    const dx = t.clientX - pressStartPos.x;
+                    const dy = t.clientY - pressStartPos.y;
+                    if (dx * dx + dy * dy > MOVE_TOLERANCE_PX * MOVE_TOLERANCE_PX) {
+                        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+                        longPressFired = true;
+                    }
+                }
+            }
+        }, { passive: true });
+
         row.addEventListener('click', () => {
-            const partName = row.getAttribute('data-part-name');
-
-            if (row.classList.contains('active')) {
-                row.classList.remove('active');
-                SpecificationService.showAllParts();
-            } else {
-                partRows.forEach(r => r.classList.remove('active'));
-                row.classList.add('active');
-                SpecificationService.highlightParts(partName, true);
+            if (longPressFired) {
+                longPressFired = false;
+                return;
             }
-
-            if (store.getState('ui.currentMode') === '2D') {
-                loadDrawingForPart(partName);
-            }
-
-            if (store.getState('ui.currentView') === 'cutting') {
-                store.setState('ui.currentView', 'specification');
-            }
+            // Призрачный клик после жеста мульти-активации: исходная строка
+            // отсоединена, click достался новой строке без флага longPressFired.
+            if (Date.now() < _rowClickSuppressedUntil) return;
+            _handleRowActivate(row, store.getState('specification.multiSelectMode'));
         });
     });
+
+    const specTable = document.querySelector('.spec-table');
+    if (specTable && !specTable._multiSelectOutsideHandler) {
+        specTable._multiSelectOutsideHandler = (e) => {
+            if (!store.getState('specification.multiSelectMode')) return;
+            // В полноэкранном режиме таблица скрыта и пользователь работает
+            // с моделью (вращение, клики по канвасу) — это не «клик мимо
+            // таблицы» и мультивыбор сбрасывать не должен.
+            if (document.body.classList.contains('fullscreen-active')) return;
+            // Не сбрасываем мультивыбор при кликах на UI-элементы управления:
+            //   - верхняя панель кнопок (назад, 3D/2D, полноэкранный режим, настройки);
+            //   - модальное окно настроек и его содержимое;
+            //   - док-панель плагинов и всплывающие панели плагинов;
+            //   - разделитель info-panel / model-container (resize-handle) и его кнопку.
+            // Иначе пользователь, выбрав несколько деталей в спецификации, не сможет
+            // развернуть окно на весь экран или открыть настройки — мультивыбор
+            // молча сбросится, и вместо выбранных деталей покажется вся модель.
+            const target = e.target;
+            if (target instanceof Element) {
+                // Цель клика могла быть отсоединена от DOM другим обработчиком
+                // этого же события, который перерисовывает своё поддерево во время
+                // всплытия (перерисовка tbody после toggle строки, замена иконки
+                // кнопки полноэкранного режима через innerHTML). У отсоединённой
+                // цели closest() не находит предков и contains() даёт false, из-за
+                // чего legitimate клик по UI ошибочно считался «кликом мимо
+                // таблицы». Такой клик сброс мультивыбора не выполняет.
+                if (!target.isConnected) return;
+                if (target.closest('.control-buttons')) return;
+                if (target.closest('#settings-modal')) return;
+                if (target.closest('.plugin-dock')) return;
+                if (target.closest('.plugin-panels')) return;
+                if (target.closest('#resize-handle')) return;
+                if (target.closest('.drawing-controls')) return;
+            }
+            if (!specTable.contains(e.target)) {
+                SpecificationService.showAllParts();
+            }
+        };
+        document.addEventListener('click', specTable._multiSelectOutsideHandler);
+    }
+
+    if (!_escMultiSelectHandlerInstalled) {
+        _escMultiSelectHandlerInstalled = true;
+        // Регистрация в capture-фазе: bubble-обработчик FullscreenManager,
+        // зарегистрированный раньше, успевает выйти из полноэкранного режима и
+        // сбросить isFullscreen до того, как сработает проверка ниже, — из-за
+        // этого Esc одновременно с выходом из полноэкранного режима сбрасывал
+        // мультивыбор. В capture-фазе состояние ещё исходное.
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape' || !store.getState('specification.multiSelectMode')) return;
+            // Esc при активном полноэкранном режиме сначала закрывает сам
+            // полноэкранный режим (см. FullscreenManager) и не должен одновременно
+            // сбрасывать мультивыбор: пользователь разворачивал модель, чтобы
+            // рассмотреть выбранные детали, а не выходить из режима выбора.
+            if (window.FullscreenManager?.isFullscreen) return;
+            // Аналогично при открытом окне настроек: сначала закрывается оно.
+            const settingsModal = document.getElementById('settings-modal');
+            if (settingsModal?.classList.contains('active')) return;
+            SpecificationService.showAllParts();
+        }, true);
+    }
+}
+
+let _escMultiSelectHandlerInstalled = false;
+
+function _handleRowActivate(row, isMulti) {
+    const partName = row.getAttribute('data-part-name');
+    if (!partName) return;
+
+    if (isMulti) {
+        SpecificationService.togglePartInMultiSelection(partName);
+    } else {
+        if (row.classList.contains('active')) {
+            SpecificationService.showAllParts();
+        } else {
+            document.querySelectorAll('.part-row').forEach(r => r.classList.remove('active'));
+            row.classList.add('active');
+            SpecificationService.highlightParts(partName, true);
+        }
+    }
+
+    if (store.getState('ui.currentMode') === '2D' && !isMulti) {
+        loadDrawingForPart(partName);
+    }
+
+    if (store.getState('ui.currentView') === 'cutting') {
+        store.setState('ui.currentView', 'specification');
+    }
 }
 
 function loadDrawingForPart(partName, attempt = 0) {
@@ -303,6 +523,10 @@ function subscribeToSelectedPart() {
         document.querySelectorAll('.part-row').forEach(row => {
             row.classList.toggle('active', row.getAttribute('data-part-name') === partName);
         });
+    });
+    store.subscribe('specification.selectedParts', () => {
+        const structure = store.getState('specification.structure');
+        if (structure?.length > 0) renderSpecificationTable(structure);
     });
 }
 

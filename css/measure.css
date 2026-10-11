@@ -146,7 +146,7 @@
 /* Выделение метки измерения */
 .meas-label-selected {
     outline: 2px solid rgba(187, 154, 247, 0.9) !important;
-    outline-offset: 3px !important;
+    outline-offset: 0px !important;
     box-shadow: 0 0 12px rgba(187, 154, 247, 0.5) !important;
 }
 

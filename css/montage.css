@@ -58,6 +58,13 @@
     line-height: 1.35;
 }
 
+/* dvh: на мобильных учитывает показ/скрытие URL-бара браузера */
+@supports (height: 100dvh) {
+    .montage-panel {
+        max-height: min(78dvh, 620px);
+    }
+}
+
 .montage-panel.visible {
     display: block;
 }
@@ -67,6 +74,26 @@
     align-items: center;
     justify-content: space-between;
     margin-bottom: 10px;
+}
+
+/* Sticky-шапка: при скролле длинной формы всегда видны заголовок и кнопка «Закрыть».
+   Фон повторяет фон панели; отрицательные margin/padding растягивают шапку
+   на полную ширину (поверх боковых паддингов панели). */
+.montage-panel > .montage-panel__header {
+    position: sticky;
+    top: -14px;
+    z-index: 5;
+    margin: -14px -14px 10px;
+    padding: 14px 14px 10px;
+    background: var(--button-color, rgba(20, 22, 30, 0.96));
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(128, 128, 128, 0.14);
+    border-radius: 16px 16px 0 0;
+}
+
+[data-theme="light"] .montage-panel > .montage-panel__header {
+    background: var(--button-color, rgba(250, 250, 252, 0.96));
 }
 
 .montage-panel__title {
@@ -139,26 +166,56 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 4px 9px;
+    padding: 5px 9px;
     border-radius: 20px;
     background: rgba(128, 128, 128, 0.14);
-    font-size: 11.5px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
 }
 
-.montage-chip i {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: rgba(160, 160, 160, 0.75);
+/* SVG-иконка внутри чипа: те же иконки, что на тулбаре плагина */
+.montage-chip svg {
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
+    fill: none;
 }
 
-.montage-chip--installed i {
-    background: #2ecc71;
+.montage-chip b {
+    font-weight: 700;
+    font-size: 12.5px;
 }
 
-.montage-chip--planned i {
-    background: #ff9500;
+.montage-chip--installed {
+    background: rgba(46, 204, 113, 0.14);
+    color: #2ecc71;
+}
+.montage-chip--installed svg {
+    color: #2ecc71;
+    stroke: #2ecc71;
+}
+
+.montage-chip--planned {
+    background: rgba(255, 149, 0, 0.14);
+    color: #ff9500;
+}
+.montage-chip--planned svg {
+    color: #ff9500;
+    stroke: #ff9500;
+}
+
+.montage-chip--none {
+    background: rgba(160, 160, 160, 0.14);
+    color: var(--text-color, #eee);
+    opacity: 0.7;
+}
+.montage-chip--none svg {
+    color: rgba(160, 160, 160, 0.85);
+    stroke: rgba(160, 160, 160, 0.85);
+}
+
+[data-theme="light"] .montage-chip--none {
+    color: #555;
 }
 
 /* --- Атрибуты кисти: исполнитель и дата --- */
@@ -229,37 +286,6 @@
     letter-spacing: 0.7px;
     opacity: 0.55;
     margin: 10px 0 6px;
-}
-
-/* --- Режимы отображения --- */
-
-.montage-modes {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 5px;
-}
-
-.montage-modes button {
-    padding: 7px 8px;
-    border-radius: 9px;
-    border: 1px solid rgba(128, 128, 128, 0.28);
-    background: rgba(128, 128, 128, 0.08);
-    color: inherit;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.15s;
-    text-align: center;
-}
-
-.montage-modes button:hover {
-    background: rgba(128, 128, 128, 0.18);
-}
-
-.montage-modes button.active {
-    border-color: rgba(78, 205, 196, 0.65);
-    background: rgba(78, 205, 196, 0.14);
-    color: #4ecdc4;
-    font-weight: 600;
 }
 
 /* --- Действия --- */
@@ -405,6 +431,104 @@
     padding: 12px;
     text-align: center;
     opacity: 0.6;
+}
+
+/* --- Аккордеон (сворачиваемые секции списков) --- */
+
+.montage-accordion {
+    margin-top: 10px;
+}
+
+.montage-accordion__head {
+    /* Кнопка-шапка: тянется на полную ширину секции, выглядит как section-title,
+       но кликабельна и показывает шеврон. */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    margin: 0;
+    border: 1px solid rgba(128, 128, 128, 0.22);
+    border-radius: 10px;
+    background: rgba(128, 128, 128, 0.08);
+    color: inherit;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.montage-accordion__head:hover {
+    background: rgba(128, 128, 128, 0.18);
+}
+
+.montage-accordion__head:focus-visible {
+    outline: 2px solid rgba(78, 205, 196, 0.5);
+    outline-offset: 1px;
+}
+
+.montage-accordion__title {
+    flex: 1;
+    text-align: left;
+    opacity: 0.7;
+    /* section-title стиль: капс + жирный — сохраняем визуальный язык панели */
+}
+
+.montage-accordion__count {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-color, #eee);
+    opacity: 0.55;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.montage-accordion__chevron {
+    flex-shrink: 0;
+    opacity: 0.55;
+    transition: transform 0.2s ease;
+}
+
+.montage-accordion.expanded .montage-accordion__chevron {
+    transform: rotate(180deg);
+}
+
+.montage-accordion__body {
+    /* Свёрнуто по умолчанию: список занимает много места и не всегда нужен. */
+    display: none;
+    margin-top: 6px;
+}
+
+.montage-accordion.expanded .montage-accordion__body {
+    display: block;
+}
+
+/* Когда аккордеон раскрыт — шапка слегка подсвечена */
+.montage-accordion.expanded .montage-accordion__head {
+    border-color: rgba(78, 205, 196, 0.4);
+    background: rgba(78, 205, 196, 0.08);
+}
+
+[data-theme="light"] .montage-accordion__head {
+    border-color: rgba(0, 0, 0, 0.14);
+    background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .montage-accordion__head:hover {
+    background: rgba(0, 0, 0, 0.07);
+}
+
+[data-theme="light"] .montage-accordion.expanded .montage-accordion__head {
+    border-color: rgba(14, 141, 133, 0.5);
+    background: rgba(78, 205, 196, 0.16);
 }
 
 /* --- Футер --- */
@@ -643,8 +767,92 @@
     .montage-panel {
         bottom: 56px;
         width: calc(100vw - 16px);
-        padding: 12px 12px 8px;
+        padding: 11px 11px 7px;
         border-radius: 14px;
+        /* На мобильных maxHeight выставляется через JS (window.innerHeight),
+           но на случай если JS не отработал — dvh-фолбэк вместо vh:
+           учитывает показ/скрытие URL-бара браузера. */
+        max-height: calc(100dvh - 56px - 16px);
+    }
+
+    /* Фолбэк для браузеров без dvh: используем vh, прикрытое safe-area-top */
+    @supports not (height: 100dvh) {
+        .montage-panel {
+            max-height: calc(100vh - 56px - 16px);
+        }
+    }
+
+    /* Sticky-шапка на мобильных: чуть плотнее, чтобы экономить вертикаль */
+    .montage-panel > .montage-panel__header {
+        margin: -11px -11px 8px;
+        padding: 11px 11px 8px;
+        border-radius: 14px 14px 0 0;
+    }
+
+    .montage-panel__title {
+        font-size: 14px;
+    }
+
+    /* Компактнее: меньше воздуха между секциями */
+    .montage-section-title {
+        margin: 8px 0 5px;
+    }
+
+    .montage-progress {
+        margin-bottom: 8px;
+    }
+
+    .montage-progress__bar {
+        height: 6px;
+        margin-bottom: 4px;
+    }
+
+    .montage-chips {
+        gap: 5px;
+        margin-bottom: 9px;
+    }
+
+    .montage-chip {
+        padding: 3px 7px;
+        font-size: 11px;
+    }
+
+    .montage-attrs {
+        grid-template-columns: 1fr 110px;
+        gap: 6px;
+    }
+
+    .montage-field input {
+        padding: 5px 7px;
+        font-size: 12px;
+    }
+
+    .montage-hint {
+        margin-top: 4px;
+        font-size: 10px;
+    }
+
+    .montage-action {
+        padding: 7px 8px;
+        font-size: 12px;
+    }
+
+    /* Аккордеон на мобильных: чуть компактнее, чтобы шапки не занимали много места */
+    .montage-accordion {
+        margin-top: 8px;
+    }
+
+    .montage-accordion__head {
+        padding: 7px 9px;
+        font-size: 10.5px;
+    }
+
+    .montage-list {
+        max-height: 220px;
+    }
+
+    .montage-list__row {
+        padding: 4px 6px;
     }
 
     .montage-toast {
@@ -677,12 +885,6 @@
 
 [data-theme="light"] .montage-radio:hover {
     background: rgba(0, 0, 0, 0.07);
-}
-
-[data-theme="light"] .montage-modes button.active {
-    color: #0e8d85;
-    border-color: rgba(14, 141, 133, 0.5);
-    background: rgba(78, 205, 196, 0.16);
 }
 
 [data-theme="light"] .montage-toast {

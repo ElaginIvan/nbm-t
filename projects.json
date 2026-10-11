@@ -72,7 +72,8 @@
       "previewImage": "models/angar/preview.png",
       "modelFile": "models/angar/model.glb",
       "drawingsPath": "models/angar/avif",
-      "specFile": "models/angar/spec.csv"
+      "specFile": "models/angar/spec.csv",
+      "cuttingFile": "models/angar/cutting.csv"
     }
   ]
 }

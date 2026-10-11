@@ -1,6 +1,11 @@
 /**
- * Приложение 3D Viewer — ядро.
- * CSV-утилиты, общие хелперы, Store (хранилище состояния), DataService (загрузка проектов).
+ * Приложение 3D Viewer — ядро
+ *
+ * Содержит:
+ * - CSV утилиты (encoding detection, parsing, loading, finding)
+ * - Общие утилиты (onReady, escapeHtml, getProjectId, deepClone)
+ * - Store (централизованное хранилище состояния)
+ * - DataService (загрузка данных проектов с кэшированием)
  */
 
 // ============================================================
@@ -177,9 +182,18 @@ function deepClone(obj) {
     return cloned;
 }
 
+/** Начальное состояние приложения */
 const initialState = {
-    project: { currentId: null, data: null, isLoading: false, error: null },
-    model: { object: null, isLoaded: false },
+    project: {
+        currentId: null,
+        data: null,
+        isLoading: false,
+        error: null
+    },
+    model: {
+        object: null,
+        isLoaded: false
+    },
     cutting3d: {
         isActive: false,
         activeAxis: null,
@@ -187,15 +201,32 @@ const initialState = {
         axisBounds: { x: { min: -1, max: 1 }, y: { min: -1, max: 1 }, z: { min: -1, max: 1 } },
         invertedAxes: { x: false, y: false, z: false }
     },
-    specification: { structure: [], csvData: [], lastSelectedPart: null, isLoading: false },
+    specification: {
+        structure: [],
+        csvData: [],
+        lastSelectedPart: null,
+        selectedParts: [],
+        multiSelectMode: false,
+        isLoading: false
+    },
     cutting: {
-        materialsData: {}, isLoading: false,
-        settings: { stockLength: 6000, kerf: 0, multiplicity: 1 }, results: null
+        materialsData: {},
+        isLoading: false,
+        settings: { stockLength: 6000, kerf: 0, multiplicity: 1 },
+        results: null
     },
     ui: {
-        currentView: 'specification', currentMode: '3D',
-        infoPanelHeight: null, isFullscreen: false, activeContainer: 'model',
-        settings: { modelColor: '#CCCCCC', modelMetalness: 0.1, modelRoughness: 0.75, themeMode: 'auto' }
+        currentView: 'specification',
+        currentMode: '3D',
+        infoPanelHeight: null,
+        isFullscreen: false,
+        activeContainer: 'model',
+        settings: {
+            modelColor: '#CCCCCC',
+            modelMetalness: 0.1,
+            modelRoughness: 0.75,
+            themeMode: 'auto'
+        }
     },
     drawing: { currentPart: null }
 };
@@ -260,10 +291,13 @@ class Store {
             }
         });
     }
+
 }
 
+/** Экземпляр хранилища */
 export const store = new Store(initialState);
 
+// Восстанавливаем настройки UI из localStorage
 const _savedUISettings = localStorage.getItem('uiSettings');
 if (_savedUISettings) {
     try {
@@ -274,6 +308,7 @@ if (_savedUISettings) {
     }
 }
 
+// Применяем тему как можно раньше (до рендера)
 const _initialTheme = store.getState('ui.settings.themeMode');
 if (_initialTheme && _initialTheme !== 'auto') {
     document.documentElement.setAttribute('data-theme', _initialTheme);
@@ -283,7 +318,11 @@ if (_initialTheme && _initialTheme !== 'auto') {
 // DATA SERVICE — Загрузка данных проектов с кэшированием
 // ============================================================
 
-const projectsCache = { data: null, timestamp: 0, ttl: 5 * 60 * 1000 };
+const projectsCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 5 * 60 * 1000
+};
 let isLoadingProjects = false;
 let projectsLoadPromise = null;
 
@@ -353,5 +392,9 @@ export const DataService = {
         return store.getState('project.currentId') || localStorage.getItem('selectedProject');
     }
 };
+
+// ============================================================
+// ЭКСПОРТ
+// ============================================================
 
 export { onReady, getProjectId, escapeHtml, deepClone, loadCSV, findInCSV, parseCSV, decodeCSV, ENCODINGS };
