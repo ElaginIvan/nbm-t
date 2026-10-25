@@ -1,0 +1,938 @@
+/**
+ * Плагин «Сборка» — анимированная последовательность сборки изделия
+ * Стили: пилюля-тулбар (редактирование + плеер), большая панель шагов,
+ * таймлайн, диалоги, тосты. Конвенции — как в montage.css.
+ */
+
+/* ====================== ПИЛЮЛЯ-ТУЛБАР ====================== */
+
+.assembly-pill {
+    gap: 4px;
+}
+
+/* Режим плеера: группа редактирования скрыта, плеер виден (и наоборот) */
+.assembly-pill .assembly-play-group { display: none; }
+.assembly-pill.assembly--playing .assembly-play-group { display: flex; }
+.assembly-pill.assembly--playing .assembly-edit-group { display: none; }
+
+/* Скорость + таймлайн + выход (без фона группы) */
+.assembly-play-extra {
+    align-items: center;
+    gap: 4px;
+    padding: 0 2px;
+}
+
+/* Кнопка «Призраки» активна в режиме ghost */
+.plugin-pill-btn.assembly-btn--ghost-on {
+    color: #4ecdc4;
+    border-color: rgba(78, 205, 196, 0.55);
+    background: rgba(78, 205, 196, 0.13);
+}
+
+/* Кнопка «Сборка ↑» подсвечена, пока выбор поднят до уровня сборки */
+.plugin-pill-btn.assembly-btn--scope-on {
+    color: #4ecdc4;
+    border-color: rgba(78, 205, 196, 0.55);
+    background: rgba(78, 205, 196, 0.13);
+}
+
+/* ====================== ПЛЕЕР: ТАЙМЛАЙН ====================== */
+
+.assembly-timeline {
+    position: relative;
+    width: 150px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    touch-action: none;
+    padding: 0 4px;
+}
+
+.assembly-timeline__track {
+    position: relative;
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: rgba(128, 128, 128, 0.25);
+    overflow: hidden;
+    display: flex;
+}
+
+/* Сегмент шага: заполненная часть — прогресс внутри шага */
+.assembly-timeline__seg {
+    position: relative;
+    height: 100%;
+    background: rgba(128, 128, 128, 0.18);
+    border-right: 1px solid rgba(0, 0, 0, 0.35);
+    flex-shrink: 1;
+    min-width: 2px;
+    overflow: hidden;
+}
+
+.assembly-timeline__seg:last-child {
+    border-right: none;
+}
+
+.assembly-timeline__seg-fill {
+    position: absolute;
+    inset: 0;
+    width: 0%;
+    background: linear-gradient(90deg, #14907f, #4ecdc4);
+}
+
+.assembly-timeline__seg--done .assembly-timeline__seg-fill {
+    width: 100%;
+}
+
+.assembly-timeline__label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 10.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+/* Селектор скорости в плеере */
+.assembly-speed {
+    background: rgba(0, 0, 0, 0.15);
+    color: var(--text-color, #eee);
+    border: 1px solid rgba(128, 128, 128, 0.25);
+    border-radius: 20px;
+    font-size: 11.5px;
+    height: 30px;
+    padding: 0 8px;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.assembly-speed option {
+    background: var(--card-background, #1a1c26);
+    color: var(--text-color, #eee);
+}
+
+/* Подпись шага в плеере */
+.assembly-step-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.85;
+    padding: 0 4px;
+    white-space: nowrap;
+    max-width: 170px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ====================== БОЛЬШАЯ ПАНЕЛЬ ====================== */
+
+.assembly-panel {
+    pointer-events: auto;
+    display: none;
+    position: absolute;
+    bottom: 64px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 380px;
+    max-width: calc(100vw - 20px);
+    max-height: min(78vh, 640px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--button-color, rgba(20, 22, 30, 0.92));
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+    padding: 14px 14px 10px;
+    color: var(--text-color, #eee);
+    z-index: 1001;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+@supports (height: 100dvh) {
+    .assembly-panel {
+        max-height: min(78dvh, 640px);
+    }
+}
+
+.assembly-panel.visible {
+    display: block;
+}
+
+.assembly-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.assembly-panel > .assembly-panel__header {
+    position: sticky;
+    top: -14px;
+    z-index: 5;
+    margin: -14px -14px 10px;
+    padding: 14px 14px 10px;
+    background: var(--button-color, rgba(20, 22, 30, 0.96));
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(128, 128, 128, 0.14);
+    border-radius: 16px 16px 0 0;
+}
+
+[data-theme="light"] .assembly-panel > .assembly-panel__header {
+    background: var(--button-color, rgba(250, 250, 252, 0.96));
+}
+
+.assembly-panel__title {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+.assembly-panel__close {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(128, 128, 128, 0.15);
+    color: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.assembly-panel__close:hover {
+    background: rgba(128, 128, 128, 0.3);
+}
+
+.assembly-panel__close svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+.assembly-panel,
+.assembly-modal__card {
+    color-scheme: dark;
+}
+
+[data-theme="light"] .assembly-panel,
+[data-theme="light"] .assembly-modal__card {
+    color-scheme: light;
+}
+
+/* --- Сводка --- */
+
+.assembly-stats {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+}
+
+.assembly-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    border-radius: 20px;
+    background: rgba(128, 128, 128, 0.14);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.assembly-chip b {
+    font-weight: 700;
+    font-size: 12.5px;
+}
+
+.assembly-chip--steps {
+    background: rgba(78, 205, 196, 0.13);
+    color: #4ecdc4;
+}
+
+.assembly-chip--parts {
+    background: rgba(255, 149, 0, 0.13);
+    color: #ff9500;
+}
+
+.assembly-chip--total {
+    opacity: 0.75;
+}
+
+/* --- Секции --- */
+
+.assembly-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    opacity: 0.55;
+    margin: 10px 0 6px;
+}
+
+.assembly-hint {
+    font-size: 10.5px;
+    opacity: 0.5;
+    margin-top: 5px;
+}
+
+/* --- Аккордеон «Шаги последовательности» (поднос как у «Монтажа») --- */
+
+.assembly-accordion {
+    margin-top: 8px;
+}
+
+.assembly-accordion__head {
+    /* Кнопка-шапка: тянется на всю ширину секции, выглядит как section-title,
+       но кликабельна и показывает шеврон. */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    margin: 0;
+    border: 1px solid rgba(128, 128, 128, 0.22);
+    border-radius: 9px;
+    background: rgba(128, 128, 128, 0.06);
+    color: inherit;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.assembly-accordion__head:hover {
+    background: rgba(128, 128, 128, 0.16);
+}
+
+.assembly-accordion__head:focus-visible {
+    outline: 2px solid rgba(78, 205, 196, 0.5);
+    outline-offset: 1px;
+}
+
+.assembly-accordion__title {
+    flex: 1;
+    text-align: left;
+    opacity: 0.7;
+}
+
+.assembly-accordion__count {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-color, #eee);
+    opacity: 0.55;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.assembly-accordion__chevron {
+    flex-shrink: 0;
+    opacity: 0.55;
+    transition: transform 0.2s ease;
+}
+
+.assembly-accordion.expanded .assembly-accordion__chevron {
+    transform: rotate(180deg);
+}
+
+.assembly-accordion__body {
+    /* Свёрнут по умолчанию: список длинный и не всегда нужен — аккордеон
+       экономит место панели, особенно на телефоне. */
+    display: none;
+    margin-top: 6px;
+}
+
+.assembly-accordion.expanded .assembly-accordion__body {
+    display: block;
+}
+
+/* Когда аккордеон раскрыт — шапка слегка подсвечена */
+.assembly-accordion.expanded .assembly-accordion__head {
+    border-color: rgba(78, 205, 196, 0.4);
+    background: rgba(78, 205, 196, 0.08);
+}
+
+/* --- Список шагов --- */
+
+.assembly-steps {
+    border: 1px solid rgba(128, 128, 128, 0.18);
+    border-radius: 9px;
+    max-height: 240px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 3px;
+}
+
+.assembly-step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 5px;
+    border-radius: 7px;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.assembly-step:hover {
+    background: rgba(128, 128, 128, 0.1);
+}
+
+.assembly-step.current {
+    border-color: rgba(78, 205, 196, 0.55);
+    background: rgba(78, 205, 196, 0.08);
+}
+
+.assembly-step__num {
+    width: 26px;
+    height: 22px;
+    border-radius: 6px;
+    background: rgba(128, 128, 128, 0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.assembly-step.current .assembly-step__num {
+    background: rgba(78, 205, 196, 0.25);
+    color: #4ecdc4;
+}
+
+.assembly-step__name {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12.5px;
+    padding: 3px 4px;
+    border-radius: 5px;
+    text-overflow: ellipsis;
+}
+
+.assembly-step__name:focus {
+    outline: none;
+    background: rgba(128, 128, 128, 0.15);
+}
+
+.assembly-step__name::placeholder {
+    color: inherit;
+    opacity: 0.35;
+}
+
+.assembly-step__count {
+    font-size: 11px;
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.assembly-step__style {
+    border: 1px solid rgba(128, 128, 128, 0.25);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.12);
+    color: inherit;
+    font-size: 10.5px;
+    height: 22px;
+    padding: 0 4px;
+    cursor: pointer;
+    outline: none;
+    max-width: 92px;
+    flex-shrink: 0;
+}
+
+.assembly-step__style option {
+    background: var(--card-background, #1a1c26);
+    color: var(--text-color, #eee);
+}
+
+.assembly-step__btn {
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    opacity: 0.45;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.assembly-step__btn:hover:not(:disabled) {
+    opacity: 1;
+    background: rgba(128, 128, 128, 0.2);
+}
+
+.assembly-step__btn:disabled {
+    opacity: 0.15;
+    cursor: default;
+}
+
+.assembly-step__btn svg {
+    width: 13px;
+    height: 13px;
+}
+
+.assembly-step__btn--del:hover:not(:disabled) {
+    color: #ff6b6b;
+}
+
+.assembly-steps__empty {
+    padding: 14px 10px;
+    text-align: center;
+    opacity: 0.55;
+    font-size: 12px;
+}
+
+/* --- Кнопки-действия --- */
+
+.assembly-actions {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.assembly-action {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    border: 1px solid rgba(128, 128, 128, 0.28);
+    background: rgba(128, 128, 128, 0.08);
+    color: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.assembly-action:hover:not(:disabled) {
+    background: rgba(128, 128, 128, 0.18);
+}
+
+.assembly-action:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.assembly-action svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    color: inherit;
+    flex-shrink: 0;
+}
+
+.assembly-action span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* --- Настройки (сетка полей) --- */
+
+.assembly-grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+}
+
+.assembly-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.assembly-field > span {
+    font-size: 10.5px;
+    opacity: 0.6;
+    display: flex;
+    justify-content: space-between;
+}
+
+.assembly-field > span b {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.85;
+}
+
+.assembly-field select,
+.assembly-field input[type="range"] {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.assembly-field select {
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(128, 128, 128, 0.3);
+    background: rgba(128, 128, 128, 0.1);
+    color: inherit;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23888' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+}
+
+.assembly-field select option {
+    background: var(--card-background, #1a1c26);
+    color: var(--text-color, #eee);
+}
+
+.assembly-field input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 10px;
+    background: rgba(128, 128, 128, 0.25);
+    outline: none;
+    cursor: pointer;
+    margin: 8px 0;
+}
+
+.assembly-field input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(128, 128, 128, 0.3);
+}
+
+/* --- Чекбокс-строка --- */
+
+.assembly-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 2px;
+    cursor: pointer;
+    font-size: 12.5px;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.assembly-check input {
+    margin: 0;
+    accent-color: #4ecdc4;
+    cursor: pointer;
+    width: 15px;
+    height: 15px;
+}
+
+/* --- Футер --- */
+
+.assembly-panel__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(128, 128, 128, 0.16);
+}
+
+.assembly-reset {
+    border: none;
+    background: none;
+    color: #ff6b6b;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 0;
+    opacity: 0.85;
+}
+
+.assembly-reset:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
+
+.assembly-saved {
+    font-size: 11px;
+    opacity: 0.5;
+    white-space: nowrap;
+}
+
+/* ====================== ДИАЛОГ ====================== */
+
+.assembly-modal {
+    pointer-events: auto;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1400;
+    padding: 16px;
+}
+
+.assembly-modal__card {
+    width: 340px;
+    max-width: 100%;
+    background: var(--button-color, rgba(24, 26, 34, 0.98));
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+    padding: 16px;
+    color: var(--text-color, #eee);
+    font-size: 13px;
+}
+
+.assembly-modal__title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.assembly-modal__body p {
+    margin: 0 0 7px;
+}
+
+.assembly-modal__warn {
+    color: #ffb14e;
+    font-size: 12px;
+}
+
+.assembly-modal__hint {
+    opacity: 0.65;
+    font-size: 11.5px;
+}
+
+.assembly-modal__buttons {
+    display: flex;
+    gap: 7px;
+    justify-content: flex-end;
+    margin-top: 13px;
+    flex-wrap: wrap;
+}
+
+.assembly-modal__btn {
+    padding: 8px 14px;
+    border-radius: 9px;
+    border: 1px solid rgba(128, 128, 128, 0.32);
+    background: rgba(128, 128, 128, 0.1);
+    color: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.assembly-modal__btn:hover {
+    background: rgba(128, 128, 128, 0.22);
+}
+
+.assembly-modal__btn--primary {
+    background: #4ecdc4;
+    border-color: #4ecdc4;
+    color: #10241f;
+    font-weight: 600;
+}
+
+.assembly-modal__btn--primary:hover {
+    background: #62dcd4;
+}
+
+/* ====================== ТОСТ ====================== */
+
+.assembly-toast {
+    position: absolute;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%) translateY(6px);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: min(90vw, 460px);
+    background: rgba(12, 13, 18, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+    padding: 9px 14px;
+    color: #eee;
+    font-size: 12.5px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    z-index: 1200;
+    pointer-events: auto;
+}
+
+.assembly-toast.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+.assembly-toast__text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.assembly-toast__action {
+    border: 1px solid rgba(78, 205, 196, 0.6);
+    background: rgba(78, 205, 196, 0.12);
+    color: #4ecdc4;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+
+.assembly-toast__action:hover {
+    background: rgba(78, 205, 196, 0.25);
+}
+
+/* ====================== МОБИЛЬНАЯ АДАПТАЦИЯ ====================== */
+
+@media (max-width: 768px) {
+    .assembly-panel {
+        bottom: 56px;
+        width: calc(100vw - 16px);
+        padding: 11px 11px 7px;
+        border-radius: 14px;
+        max-height: calc(100dvh - 56px - 16px);
+    }
+
+    @supports not (height: 100dvh) {
+        .assembly-panel {
+            max-height: calc(100vh - 56px - 16px);
+        }
+    }
+
+    .assembly-panel > .assembly-panel__header {
+        margin: -11px -11px 8px;
+        padding: 11px 11px 8px;
+        border-radius: 14px 14px 0 0;
+    }
+
+    .assembly-panel__title {
+        font-size: 14px;
+    }
+
+    .assembly-section-title {
+        margin: 8px 0 5px;
+    }
+
+    .assembly-accordion {
+        margin-top: 6px;
+    }
+
+    .assembly-accordion__head {
+        padding: 7px 9px;
+        font-size: 10.5px;
+    }
+
+    .assembly-steps {
+        max-height: 200px;
+    }
+
+    .assembly-step__style {
+        display: none;
+    }
+
+    .assembly-grid2 {
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+    }
+
+    .assembly-timeline {
+        width: 90px;
+    }
+
+    .assembly-step-label {
+        display: none;
+    }
+
+    .assembly-toast {
+        bottom: 108px;
+        max-width: calc(100vw - 20px);
+    }
+}
+
+/* ====================== СВЕТЛАЯ ТЕМА ====================== */
+
+[data-theme="light"] .assembly-panel,
+[data-theme="light"] .assembly-modal__card {
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22);
+}
+
+[data-theme="light"] .assembly-field select {
+    background-color: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.18);
+}
+
+[data-theme="light"] .assembly-accordion__head {
+    border-color: rgba(0, 0, 0, 0.14);
+    background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .assembly-accordion__head:hover {
+    background: rgba(0, 0, 0, 0.07);
+}
+
+[data-theme="light"] .assembly-accordion.expanded .assembly-accordion__head {
+    border-color: rgba(14, 141, 133, 0.5);
+    background: rgba(78, 205, 196, 0.16);
+}
+
+[data-theme="light"] .assembly-accordion__count {
+    color: var(--text-color, #222);
+}
+
+[data-theme="light"] .assembly-step__style {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.16);
+}
+
+[data-theme="light"] .assembly-toast {
+    background: rgba(250, 250, 252, 0.96);
+    color: #222;
+    border-color: rgba(0, 0, 0, 0.12);
+}

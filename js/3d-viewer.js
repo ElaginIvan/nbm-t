@@ -15,9 +15,7 @@ import {
     handleWindowResize, initResizeListener
 } from './engine.js';
 
-// Единый импорт реестра: регистрирует все доступные плагины и устанавливает
-// их привязки к модулям (карта pluginId → moduleId в самом registry.js).
-// Администратор решает, какие плагины подключаются к этому модулю.
+// Единый импорт реестра: регистрирует плагины и их привязки к модулям.
 import './plugins/registry.js';
 
 function getModelPath() {
@@ -130,9 +128,7 @@ function hideLoadingIndicator() {
 
 function _registerModuleAPI() {
     PluginManager.registerModuleAPI('3d-viewer', {
-        // Идентификатор модуля — нужен кросс-модульным плагинам, чтобы
-        // определять, в каком модуле они сейчас работают (3D или 2D),
-        // и адаптировать поведение.
+        // Идентификатор модуля — кросс-модульным плагинам для адаптации поведения.
         get moduleId() { return '3d-viewer'; },
         get scene() { return scene; },
         get camera() { return camera; },
@@ -276,11 +272,8 @@ let _selectedPart = null;
 let _savedColors = null;
 let _pointerDownPos = null;
 
-// [Патч 2026-10-08] Попадание на отсекаемой стороне сечения (плагин cutting-3d)?
-// Clipping planes режут геометрию ТОЛЬКО при рендере — raycaster про них не знает
-// и ловит отрезанную часть модели. Плоскости берём из материала самого меша: это
-// ровно те planes, которыми объект отрисован, поэтому фильтр всегда согласован
-// с картинкой на экране. eps = 0.1 мм — страховка от численного шума на границе.
+// Попадание на отсекаемой стороне сечения: clipping planes режут геометрию
+// только при рендере, raycaster про них не знает. Плоскости берём из материала.
 function _hitClippedBySection(hit) {
     const mats = Array.isArray(hit.object.material) ? hit.object.material : [hit.object.material];
     for (let mi = 0; mi < mats.length; mi++) {

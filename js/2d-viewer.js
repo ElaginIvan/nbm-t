@@ -1,22 +1,17 @@
 /**
  * 2D Viewer Module — просмотр 2D-чертежей.
- * Патч 2026-10-07 (v2): сохранение мультивыбора при переходе в 2D.
  * ZoomManager: зум и панорамирование.
  * UIManager: переключение 3D/2D, навигация по листам.
  * DrawingLoader: загрузка чертежей с кэшированием.
  * InputHandlers: мышь, тач, колесо.
  *
- * Плагинная система: как и в 3D-модуле, плагины подключаются централизованно
- * через реестр js/plugins/registry.js. Реестр импортируется один раз —
- * он регистрирует все доступные плагины и их привязки к модулям.
+ * Плагины подключаются централизованно через реестр js/plugins/registry.js.
  */
 
 import { store, escapeHtml } from './app.js';
 import PluginManager from './plugin-system.js';
 
-// Единый импорт реестра плагинов (идемпотентен: при повторном импорте
-// браузер использует кэш модуля, регистрации и привязки выполняются
-// только один раз за загрузку страницы).
+// Единый импорт реестра плагинов (идемпотентен благодаря кэшу ES-модулей).
 import './plugins/registry.js';
 
 // ============================================================
@@ -251,9 +246,7 @@ const DrawingLoader = {
             imageElement.src = img.src;
             imageElement.style.display = 'block';
             placeholder.style.display = 'none';
-            // Уведомляем 2D-плагины (если в реестре зарегистрированы):
-            // сменился чертёж — нужно перерисовать overlays и, возможно,
-            // восстановить сохранённые для этого листа пометки.
+            // Уведомляем 2D-плагины о смене чертежа (overlays, пометки листа).
             window.dispatchEvent(new CustomEvent('drawingChanged', {
                 detail: { designation: drawing.name, path: drawing.path }
             }));
@@ -530,9 +523,7 @@ const DrawingViewer = {
         }
 
         PluginManager.registerModuleAPI('2d-viewer', {
-            // Идентификатор модуля — нужен кросс-модульным плагинам, чтобы
-            // определять, в каком модуле они сейчас работают (3D или 2D),
-            // и адаптировать поведение.
+            // Идентификатор модуля — кросс-модульным плагинам для адаптации поведения.
             get moduleId() { return '2d-viewer'; },
             get container() { return document.getElementById('drawing-container'); },
             get imageElement() { return document.getElementById('drawing-image'); },

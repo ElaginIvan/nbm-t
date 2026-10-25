@@ -1,6 +1,5 @@
 /**
  * UI Managers Module — менеджеры интерфейса страницы проекта.
- * Патч 2026-10-07 (v2): сохранение мультивыбора при развороте на весь экран.
  * FullscreenManager: полноэкранный режим.
  * ResizeHandler: изменение панели, переключение вкладок.
  * SettingsManager: модальное окно настроек.
@@ -115,12 +114,8 @@ export const FullscreenManager = {
 
     _updateButtonIcon() {
         const icon = this.isFullscreen ? 'compress' : 'expand';
-        // Обновляем только href у <use>, не пересоздавая содержимое кнопки:
-        // замена innerHTML во время обработки click отсоединяет <svg>, который
-        // является целью события, и проверка «клик мимо таблицы» в спецификации
-        // получает отсоединённую цель (isConnected = false, closest() не находит
-        // .control-buttons) — из-за этого мультивыбор сбрасывался при
-        // разворачивании/сворачивании на весь экран.
+        // Только href у <use>: замена innerHTML при клике отсоединяет <svg> —
+        // цель события, и проверка «клик мимо таблицы» теряла мультивыбор.
         const use = this.toggleBtn.querySelector('use');
         if (use) {
             const href = `assets/icons/sprite.svg#${icon}`;
@@ -353,10 +348,7 @@ export class ResizeHandler {
         const currentPane = document.getElementById(this.currentView);
         if (currentPane) currentPane.classList.add('active');
 
-        // Восстановление подсветки выбранной детали актуально только для
-        // одиночного режима. В мульти-режиме lastSelectedPart мог остаться от
-        // прежнего одиночного выбора — highlightParts() здесь сбросил бы
-        // мультивыбор (selectedParts = [], multiSelectMode = false).
+        // Только одиночный режим: в мульти-режиме подсветка сбросила бы выбор.
         if (this.currentView === 'specification'
             && !store.getState('specification.multiSelectMode')
             && store.getState('specification.lastSelectedPart')) {
@@ -507,11 +499,8 @@ export const SettingsManager = {
         const table = document.getElementById('plugin-settings-table');
         if (!table) return;
 
-        // Авто-обнаружение: список плагинов больше не захардкожен здесь.
-        // Источник истины — реестр plugins/registry.js (через PluginManager).
-        // Каждый плагин может декларировать meta.description для подсказки.
-        // Поле modules используется, чтобы показать, к каким модулям плагин
-        // привязан (3D / 2D / оба).
+        // Список плагинов берётся из реестра plugins/registry.js (PluginManager);
+        // поле modules показывает привязку (3D / 2D / оба).
         const allPlugins = PluginManager.getAllPlugins();
         if (allPlugins.length === 0) {
             table.innerHTML = `<div class="plugin-table-empty">Нет зарегистрированных плагинов.</div>`;
@@ -601,9 +590,7 @@ export const SettingsManager = {
                     cbAutostart.disabled = false;
                 }
 
-                // Применяем ко ВСЕМ контролам UI всех модулей, к которым
-                // привязан плагин: 3D-док и 2D-док должны одновременно
-                // отреагировать на включение/выключение.
+                // Применяем ко всем модулям плагина (3D-док и 2D-док сразу).
                 if (window._pluginUIController) {
                     window._pluginUIController.togglePluginEnabled(p.id, enabled);
                 }

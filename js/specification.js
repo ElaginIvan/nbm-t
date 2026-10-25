@@ -1,12 +1,11 @@
 /**
  * Specification Module — спецификация модели и страница проекта.
- * Патч 2026-10-07 (v2): сохранение мультивыбора при развороте на весь экран.
  * SpecificationService: извлечение структуры, подсветка деталей (single/multi), CSV.
  * ProjectPage: инициализация страницы проекта.
  *
- * Мульти-выбор: long-press (500 мс) или Ctrl/Cmd+click на строке таблицы
- * переводит спецификацию в мульти-режим. В нём клики toggle строк, остальные
- * детали скрываются. Esc или клик мимо таблицы — выход.
+ * Мульти-выбор: long-press (500 мс) или Ctrl/Cmd+click переводит таблицу
+ * в мульти-режим: клики toggle строк, остальные детали скрываются.
+ * Выход — Esc или клик мимо таблицы.
  */
 
 import { store, loadCSV, findInCSV, escapeHtml, DataService } from './app.js';
@@ -14,15 +13,11 @@ import { store, loadCSV, findInCSV, escapeHtml, DataService } from './app.js';
 const LONG_PRESS_MS = 500;
 const MOVE_TOLERANCE_PX = 10;
 // Окно подавления «призрачного» клика после жеста мульти-активации
-// (long-press / Ctrl+клик). Призрачный клик приходит от mouseup в первые
-// миллисекунды после отпускания; осознанный клик человека — заметно позже.
+// (long-press / Ctrl+клик): клик от mouseup успевает попасть в новую строку
+// после перестройки tbody и toggle её назад.
 const CLICK_SUPPRESS_MS = 350;
 
-// Метка времени, до которой клики по строкам игнорируются. Нужна потому, что
-// мульти-активация синхронно перестраивает tbody (перерисовка таблицы), исходная
-// строка отсоединяется от DOM, и click от отпускания кнопки браузер может
-// доставить НОВОЙ строке — у той нет локального флага longPressFired, и без
-// подавления тот же жест срабатывает второй раз (toggle назад).
+// Клики по строкам игнорируются до этой метки времени.
 let _rowClickSuppressedUntil = 0;
 
 // ============================================================
@@ -410,27 +405,14 @@ function attachTableEventListeners() {
     if (specTable && !specTable._multiSelectOutsideHandler) {
         specTable._multiSelectOutsideHandler = (e) => {
             if (!store.getState('specification.multiSelectMode')) return;
-            // В полноэкранном режиме таблица скрыта и пользователь работает
-            // с моделью (вращение, клики по канвасу) — это не «клик мимо
-            // таблицы» и мультивыбор сбрасывать не должен.
+            // В полноэкранном режиме таблица скрыта — работаем с моделью.
             if (document.body.classList.contains('fullscreen-active')) return;
-            // Не сбрасываем мультивыбор при кликах на UI-элементы управления:
-            //   - верхняя панель кнопок (назад, 3D/2D, полноэкранный режим, настройки);
-            //   - модальное окно настроек и его содержимое;
-            //   - док-панель плагинов и всплывающие панели плагинов;
-            //   - разделитель info-panel / model-container (resize-handle) и его кнопку.
-            // Иначе пользователь, выбрав несколько деталей в спецификации, не сможет
-            // развернуть окно на весь экран или открыть настройки — мультивыбор
-            // молча сбросится, и вместо выбранных деталей покажется вся модель.
+            // Клик по элементам управления (кнопки, настройки, панели плагинов)
+            // мультивыбор не сбрасывает.
             const target = e.target;
             if (target instanceof Element) {
-                // Цель клика могла быть отсоединена от DOM другим обработчиком
-                // этого же события, который перерисовывает своё поддерево во время
-                // всплытия (перерисовка tbody после toggle строки, замена иконки
-                // кнопки полноэкранного режима через innerHTML). У отсоединённой
-                // цели closest() не находит предков и contains() даёт false, из-за
-                // чего legitimate клик по UI ошибочно считался «кликом мимо
-                // таблицы». Такой клик сброс мультивыбора не выполняет.
+                // Отсоединённая от DOM цель (перерисовка поддерева при всплытии)
+                // ошибочно выглядела бы «кликом мимо таблицы».
                 if (!target.isConnected) return;
                 if (target.closest('.control-buttons')) return;
                 if (target.closest('#settings-modal')) return;
@@ -438,6 +420,11 @@ function attachTableEventListeners() {
                 if (target.closest('.plugin-panels')) return;
                 if (target.closest('#resize-handle')) return;
                 if (target.closest('.drawing-controls')) return;
+                // Клик по вьюверу (3D/2D) и плавающим кнопкам плагинов —
+                // работа с моделью, а не «клик мимо таблицы». Выход из
+                // мульти-режима — Esc или клик по строке.
+                if (target.closest('#model-container')) return;
+                if (target.closest('[data-plugin-overlay]')) return;
             }
             if (!specTable.contains(e.target)) {
                 SpecificationService.showAllParts();
@@ -448,19 +435,12 @@ function attachTableEventListeners() {
 
     if (!_escMultiSelectHandlerInstalled) {
         _escMultiSelectHandlerInstalled = true;
-        // Регистрация в capture-фазе: bubble-обработчик FullscreenManager,
-        // зарегистрированный раньше, успевает выйти из полноэкранного режима и
-        // сбросить isFullscreen до того, как сработает проверка ниже, — из-за
-        // этого Esc одновременно с выходом из полноэкранного режима сбрасывал
-        // мультивыбор. В capture-фазе состояние ещё исходное.
+        // Capture-фаза: иначе bubble-обработчик FullscreenManager успеет выйти
+        // из полноэкранного режима раньше, и Esc сбросит мультивыбор.
         document.addEventListener('keydown', (e) => {
             if (e.key !== 'Escape' || !store.getState('specification.multiSelectMode')) return;
-            // Esc при активном полноэкранном режиме сначала закрывает сам
-            // полноэкранный режим (см. FullscreenManager) и не должен одновременно
-            // сбрасывать мультивыбор: пользователь разворачивал модель, чтобы
-            // рассмотреть выбранные детали, а не выходить из режима выбора.
+            // Сначала закрываются полноэкранный режим / окно настроек.
             if (window.FullscreenManager?.isFullscreen) return;
-            // Аналогично при открытом окне настроек: сначала закрывается оно.
             const settingsModal = document.getElementById('settings-modal');
             if (settingsModal?.classList.contains('active')) return;
             SpecificationService.showAllParts();
@@ -559,11 +539,20 @@ const ProjectInfo = {
 export const ProjectPage = {
     async init() {
         try {
-            const selectedProjectId = DataService.getSelectedProject();
+            // Приоритет источника проекта: параметр URL (?project=ID), затем
+            // сохранённый выбор в localStorage.
+            const urlProjectId = new URLSearchParams(window.location.search).get('project');
+            const selectedProjectId = urlProjectId || DataService.getSelectedProject();
             if (!selectedProjectId) throw new Error('No project selected');
 
             const project = await DataService.loadProjectData(selectedProjectId);
             if (!project) throw new Error('Project not found');
+
+            // Синхронизируем сохранённый выбор с реально открытым проектом,
+            // чтобы возврат в галерею и перезагрузка страницы показывали его же.
+            if (urlProjectId) {
+                DataService.setSelectedProject(project.id);
+            }
 
             ProjectInfo.update(project);
             subscribeToStructure();

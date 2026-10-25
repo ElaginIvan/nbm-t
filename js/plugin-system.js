@@ -1,31 +1,19 @@
 /**
- * Plugin System
- * Единая система управления плагинами для всех модулей (3D, 2D и т.д.)
+ * Plugin System — единая система управления плагинами для всех модулей (3D, 2D).
  *
  * Архитектура:
- * - PluginManager.register()       — плагин декларирует себя (id, name, icon, init, …).
- *                                     Плагин НЕ указывает к какому модулю относится —
- *                                     это ответственность администратора в реестре.
- * - PluginManager.bindModules(map) — администратор в js/plugins/registry.js указывает,
- *                                     какой плагин к какому модулю (или модулям) подключается.
- *                                     '*' — плагин доступен во всех модулях.
- * - PluginManager.registerModuleAPI() — модуль предоставляет свой API.
- * - PluginManager.initUI(container, moduleId) — создание док-панели + контейнера панелей.
+ * - register()             — плагин декларирует себя (id, name, icon, init, …),
+ *                            не зная своего модуля — привязку делает реестр.
+ * - bindModules(map)       — администратор в js/plugins/registry.js связывает
+ *                            плагин с модулем ('*' — доступен везде).
+ * - registerModuleAPI()    — модуль предоставляет свой API плагинам.
+ * - initUI(container, moduleId) — док-панель + контейнер панелей.
  *
- * Управление плагинами:
- * - localStorage ключи:
- *     pluginEnabled  — { pluginId: true/false } — плагин включён/выключен (галочка снята = не загружается вообще)
- *     pluginAutoStart — { pluginId: true/false } — автозапуск (запускается ли в фоне при загрузке приложения)
+ * localStorage: pluginEnabled {id: bool} — включён; pluginAutoStart {id: bool} —
+ * автозапуск в фоне при загрузке приложения.
  *
- * UI (док):
- * - Прозрачная горизонтальная панель-док внизу контейнера модуля
- * - Кнопки плагинов: inactive / background / active
- * - Активной может быть только одна иконка за раз
- *
- * PluginLifecycleManager:
- * - Читает localStorage для определения: какие плагины включены, какие автозапускаются
- * - При initUI — автоматически запускает плагины с autoStart в фоне (background)
- * - Предоставляет методы для включения/выключения плагинов из настроек
+ * PluginLifecycleManager: читает localStorage, запускает плагины с autoStart,
+ * предоставляет методы включения/выключения из настроек.
  */
 
 import { escapeHtml } from './app.js';
@@ -448,18 +436,10 @@ const PluginManager = {
 
         // ============================================================
         // ЦЕНТРАЛИЗОВАННЫЙ ШЛЮЗ СОБЫТИЙ
-        // Блокирует взаимодействие (клики, касания) для плагинов,
-        // находящихся в фоновом режиме. Плагины не знают об этом
-        // механизме — всё управляется из plugin-system.js.
-        //
-        // Принцип:
-        // 1. Перехватываем addEventListener на canvas, чтобы знать,
-        //    какой плагин какие обработчики зарегистрировал.
-        // 2. Перехватываем appendChild на контейнере, чтобы знать,
-        //    какие DOM-оверлеи (например CSS2DRenderer) добавил плагин.
-        // 3. При переходе плагина в фон — удаляем его canvas-слушатели
-        //    и вешаем CSS-класс, блокирующий pointer-events на оверлеях.
-        // 4. При активации — возвращаем всё обратно.
+        // Перехватываем addEventListener на canvas и appendChild на контейнере,
+        // чтобы знать слушателей и DOM-оверлеи каждого плагина. При уходе в фон
+        // canvas-слушатели снимаются, на оверлеи вешается pointer-events:none;
+        // при активации всё возвращается. Плагинам знать об этом не нужно.
         // ============================================================
 
         let _currentInitPluginId = null;
@@ -533,8 +513,7 @@ const PluginManager = {
                     if (el.classList) el.classList.add('plugin-overlay-paused');
                 }
             }
-            // Закрываем всплывающие формы плагина (сводка монтажа, точный ввод гизмо,
-            // панели солнца/стен/цвета view-display и т.д.).
+            // Закрываем всплывающие формы плагина.
             const instance = _moduleInstances.get(`${moduleId}:${pluginId}`);
             if (typeof instance?.panelPause === 'function') {
                 try { instance.panelPause(); } catch (e) { console.warn(`[plugins] onPause(${pluginId}) failed:`, e); }
@@ -561,9 +540,8 @@ const PluginManager = {
                     if (el.classList) el.classList.remove('plugin-overlay-paused');
                 }
             }
-            // Восстанавливаем визуальное состояние плагина (гизмо, траектория и т.д.).
-            // Вызывается ПОСЛЕ снятия паузы — чтобы плагин мог корректно опросить
-            // PluginManager.isPluginPaused() из onResume и получить false.
+            // Восстанавливаем визуальное состояние ПОСЛЕ снятия паузы —
+            // чтобы из onResume isPluginPaused() уже возвращал false.
             const instance = _moduleInstances.get(`${moduleId}:${pluginId}`);
             if (typeof instance?.panelResume === 'function') {
                 try { instance.panelResume(); } catch (e) { console.warn(`[plugins] onResume(${pluginId}) failed:`, e); }
@@ -697,13 +675,9 @@ const PluginManager = {
             const instance = {
                 cleanup: typeof cleanup === 'function' ? cleanup : null,
                 panelUnmount: typeof plugin.panel?.onUnmount === 'function' ? plugin.panel.onUnmount : null,
-                // onPause: вызывается при переключении на другой плагин (плагин уходит в фон).
-                // Здесь плагин должен закрыть свои всплывающие формы/диалоги —
-                // иначе они останутся открытыми поверх чужого тулбара.
+                // onPause: плагин уходит в фон — закрывает свои всплывающие формы.
                 panelPause: typeof plugin.panel?.onPause === 'function' ? plugin.panel.onPause : null,
-                // onResume: вызывается при возврате плагина из фона в активное состояние.
-                // Здесь плагин должен восстановить то, что было скрыто в onPause
-                // (например, 3D-гизмо), чтобы сохранить самодостаточность при возврате.
+                // onResume: возврат из фона — плагин восстанавливает скрытое.
                 panelResume: typeof plugin.panel?.onResume === 'function' ? plugin.panel.onResume : null,
                 toolbarEl,
             };
@@ -718,19 +692,20 @@ const PluginManager = {
             if (pluginId === activePluginId) return;
 
             const wasBackground = runningPlugins.has(pluginId);
-            if (!wasBackground) {
-                _initPluginInstance(pluginId);
-            }
 
-            // Паузим ВСЕ другие запущенные плагины (они переходят в фон)
+            // Паузим остальные плагины ДО инициализации/возобновления целевого:
+            // его init() должен видеть финальное состояние сцены (материалы,
+            // видимость), а не промежуточное.
             for (const id of runningPlugins) {
                 if (id !== pluginId) {
                     _pausePluginInteractions(id);
                 }
             }
 
-            // Если плагин был в фоне (и его слушатели были убраны) — возобновляем
-            if (wasBackground) {
+            if (!wasBackground) {
+                _initPluginInstance(pluginId);
+            } else {
+                // Плагин был в фоне (его слушатели были убраны) — возобновляем
                 _resumePluginInteractions(pluginId);
             }
 
@@ -827,6 +802,10 @@ const PluginManager = {
                 const plugin = _plugins.get(pluginId);
                 if (!plugin || buttons.has(pluginId)) return;
 
+                // Плагин добавляем и в enabledPlugins: список захвачен при initUI,
+                // без дополнения автозапуск/условная видимость не сработали бы.
+                if (!enabledPlugins.includes(plugin)) enabledPlugins.push(plugin);
+
                 const btn = _createDockButton(pluginId, plugin);
                 dock.appendChild(btn);
                 buttons.set(pluginId, btn);
@@ -843,6 +822,8 @@ const PluginManager = {
                     btn.remove();
                     buttons.delete(pluginId);
                 }
+                const idx = enabledPlugins.findIndex(p => p.id === pluginId);
+                if (idx !== -1) enabledPlugins.splice(idx, 1);
                 _refreshButtonsVisibility();
             }
         }
@@ -903,11 +884,7 @@ const PluginManager = {
         return _plugins.get(id) || null;
     },
 
-    // E8: метод frameUpdate (покадровая делегация плагинам) удалён.
-    // Единственный потребитель onFrame — view-display — переведён на
-    // событийную модель (controls 'change' / 'model-transformed' / слайдеры),
-    // per-frame потребителей не осталось. Новые плагины должны использовать
-    // события, а не поллинг: это требование энергоэффективности.
+    // Метод frameUpdate удалён: плагины используют события, а не поллинг.
 
     // ============================================================
     // STORAGE API (для использования в ui-managers.js)

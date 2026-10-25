@@ -104,6 +104,16 @@ function _baseColorHex() {
     return (s && s.modelColor) || '#CCCCCC';
 }
 
+/** Метальность/шероховатость из ui.settings — единый источник истины,
+ *  синхронизируется view-display'ем при изменении слайдеров. */
+function _materialSettings() {
+    const s = _store?.getState('ui.settings') || {};
+    return {
+        metalness: s.modelMetalness !== undefined ? s.modelMetalness : 0.1,
+        roughness: s.modelRoughness !== undefined ? s.modelRoughness : 0.75,
+    };
+}
+
 function _meshMaterials(mesh) {
     if (!mesh.material) return [];
     return Array.isArray(mesh.material) ? mesh.material.filter(Boolean) : [mesh.material];
@@ -407,6 +417,7 @@ function _setGhost(mesh, on) {
 function _applyVisuals() {
     if (!_api?.model) return;
     const baseColor = new THREE.Color(_baseColorHex());
+    const matSettings = _materialSettings();
     const isolationActive = !!_store?.getState('specification.lastSelectedPart');
     const controlVisibility = !isolationActive;
 
@@ -419,6 +430,15 @@ function _applyVisuals() {
                     if (st === STATUS.INSTALLED) mat.color.setHex(STATUS_COLORS.installed);
                     else if (st === STATUS.PLANNED) mat.color.setHex(STATUS_COLORS.planned);
                     else mat.color.copy(baseColor);
+                }
+                // Синхронизируем metalness/roughness с ui.settings — иначе montage
+                // перекрашивает только color, а материалы остаются с устаревшими
+                // значениями от 3d-viewer или другого плагина.
+                if (mat.metalness !== undefined && matSettings.metalness !== undefined) {
+                    mat.metalness = matSettings.metalness;
+                }
+                if (mat.roughness !== undefined && matSettings.roughness !== undefined) {
+                    mat.roughness = matSettings.roughness;
                 }
             }
             _setGhost(mesh, ghost);
@@ -1574,7 +1594,8 @@ function _init(api) {
         const isMobile = window.matchMedia('(max-width: 768px)').matches;
         if (!isMobile || window.innerHeight <= 0) return;
         const toolbarH = 56;
-        const maxH = Math.max(240, window.innerHeight - toolbarH - 28);
+        const safeTop = 12;
+        const maxH = Math.max(240, window.innerHeight - toolbarH - safeTop - 16);
         _panelEl.style.maxHeight = maxH + 'px';
     };
     window.addEventListener('resize', onResize);
@@ -1632,8 +1653,6 @@ PluginManager.register({
     id: PLUGIN_ID,
     name: 'Монтаж',
     icon: 'montage-clipboard',
-    // module — не указывается; привязку к модулю задаёт администратор
-    // в js/plugins/registry.js через PluginManager.bindModules().
 
     meta: {
         autoStart: true, // окраска отчёта видна сразу и сохраняется в фоне

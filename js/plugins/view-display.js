@@ -8,14 +8,9 @@
 import * as THREE from 'three';
 import PluginManager from '../plugin-system.js';
 
-// ============================================================
-// КОНСТАНТЫ
-// ============================================================
-
 const STORAGE_KEY = 'pluginViewDisplay';
 const GRID_OPACITY = 0.5;
 
-/** Состояние по умолчанию при первом запуске (дефолты стен — в литерале _walls) */
 const DEFAULT_STATE = {
     shadowEnabled: true,
     gridVisible: true,
@@ -25,12 +20,10 @@ const DEFAULT_STATE = {
     shadowOpacity: 0.35,
 };
 
-// Границы слайдеров солнца
 const AZIMUTH_MIN = 0, AZIMUTH_MAX = 360;
 const ELEVATION_MIN = 5, ELEVATION_MAX = 89;
 const OPACITY_MIN = 0, OPACITY_MAX = 1;
 
-// Границы виртуальных стен
 const WALL_DISTANCE_MIN = 0.3, WALL_DISTANCE_MAX = 3.0;
 const FLOOR_HEIGHT_MIN = -1, FLOOR_HEIGHT_MAX = 1;
 const WALL_HEIGHT_FACTOR = 3;  // высота стены = высота модели × 3
@@ -38,7 +31,7 @@ const WALL_WIDTH_FACTOR = 3;   // ширина стены = max(ширина, г
 const FLOOR_DEFAULT_SIZE_FACTOR = 4;  // размер пола без стен = max размер модели × 4
 const FLOOR_MIN_SIZE = 20;            // минимальный размер пола
 const SHADOW_FIT_MARGIN = 1.08;       // запас автоподгонки тени под модель (PCF-размытие + normalBias)
-const WALLS_ROTATION_MIN = 0, WALLS_ROTATION_MAX = 360;  // диапазон слайдера поворота
+const WALLS_ROTATION_MIN = 0, WALLS_ROTATION_MAX = 360;
 
 /**
  * Базовая ориентация стен (до поворота). PlaneGeometry лежит в XY (нормаль +Z);
@@ -54,18 +47,7 @@ const WALL_AXES_BASE = {
 
 const PRESETS = ['#e74c3c', '#f1c40f', '#2ecc71', '#3498db'];
 
-// ============================================================
-// ВЫЧИСЛЕНИЕ АЗИМУТА КАМЕРЫ ДЛЯ СТЕН
-// ============================================================
-
-/**
- * Вычисляет азимут камеры в градусах (0-360) относительно центра модели.
- * Азимут = угол направления «от модели к камере» в XZ-плоскости,
- * отсчитываемый от +Z по часовой стрелке (при взгляде сверху).
- *
- * Fallback при фиксации базы стен: используется при почти вертикальном взгляде,
- * когда проекция направления взгляда на XZ вырождена (см. _getWallsBaseYaw).
- */
+// Вычисление азимута камеры для стен
 function _getCameraAzimuthDeg() {
     if (!_api?.camera || !_api?.model) return 0;
     const targetPos = new THREE.Vector3();
@@ -80,10 +62,7 @@ function _getCameraAzimuthDeg() {
     return deg;
 }
 
-/**
- * Эффективный поворот стен (в радианах) = база, зафиксированная в момент
- * включения стен (_wallsBaseYaw), + доворот слайдером (_wallsRotation).
- */
+/** Эффективный поворот стен = база + доворот слайдером. */
 function _getEffectiveWallsRotationRad() {
     return _wallsBaseYaw + THREE.MathUtils.degToRad(_wallsRotation);
 }
@@ -117,29 +96,24 @@ let _cameraLight = null;
 let _gridHelper = null;
 let _shadowPlane = null;
 
-// Сторонние источники света, созданные в engine.js (setupLights):
-// AmbientLight и FillLight «заливают» тень светом, поэтому при opacity=1
-// тень на модели выглядит полупрозрачной (остаётся ~70% освещённости).
-// Чтобы тень на модели визуально соответствовала тени на полу (которая
-// через ShadowMaterial становится полностью чёрной), мы компенсируем
-// эти источники пропорционально shadowOpacity.
+// Сторонние источники света из engine.js (AmbientLight, FillLight) заливают тень
+// светом, поэтому при opacity=1 тень на модели выглядит полупрозрачной. Компенсируем
+// их пропорционально shadowOpacity, чтобы тень на модели соответствовала тени на полу.
 let _ambientLight = null;
 let _ambientLightBaseIntensity = 0;
 let _fillLight = null;
 let _fillLightBaseIntensity = 0;
 
-// === Виртуальные стены (для AR: ловят тень модели, не отбрасывают свою) ===
+// Виртуальные стены (для AR: ловят тень модели, не отбрасывают свою).
 // Стена = receiver (ShadowMaterial) + floorLine (золотистая линия на полу).
-// Пол обрезается по границам включённых стен, стены упираются друг в друга
-// (см. _updateFloorBounds, _positionWall).
 let _walls = {
     back:  { enabled: false, distance: 1.0, receiver: null, floorLine: null },
     right: { enabled: false, distance: 1.0, receiver: null, floorLine: null },
     left:  { enabled: false, distance: 1.0, receiver: null, floorLine: null },
 };
-// Опорная база стен фиксируется в момент включения первой стены (_ensureWallReference):
-// центр/размеры модели + базовый yaw (перпендикулярно оси камеры).
-// После фиксации поворот модели и движение камеры стены не двигают.
+// Опорная база стен фиксируется в момент включения первой стены — центр/размеры
+// модели + базовый yaw (перпендикулярно оси камеры). После фиксации поворот
+// модели и движение камеры стены не двигают.
 let _wallRef = null;    // { center: THREE.Vector3, size: THREE.Vector3, minY: number } | null
 let _wallsBaseYaw = 0;  // базовый yaw стен в радианах (зафиксирован при включении)
 let _wallsRotation = 0; // доворот стен слайдером вокруг модели (градусы, 0-360)
@@ -161,8 +135,8 @@ let _outsideClickHandler = null;
 let _metalness = 0.1, _roughness = 0.75;
 let _metalnessActive = false, _roughnessActive = false;
 
-// E13: drag-слушатели документа висят только во время перетаскивания слайдеров цвета/металла.
-let _activeDragDetach = null; // сниматель текущего drag (вызывается и в _cleanup)
+// drag-слушатели документа висят только во время перетаскивания слайдеров цвета/металла.
+let _activeDragDetach = null;
 
 // Контейнер всплывающих панелей: собственная панель инструментов, а не глобальный .plugin-panels.
 let _panelsContainer = null;
@@ -183,7 +157,7 @@ function _loadState() {
 }
 
 function _saveState() {
-    // E13: дебаунс 250 мс — слайдеры 'input' не пишут localStorage на каждый пиксель.
+    // Дебаунс 250 мс — слайдеры 'input' не пишут localStorage на каждый пиксель.
     if (_saveStateTimer !== null) return;
     _saveStateTimer = setTimeout(() => { _saveStateTimer = null; _saveStateNow(); }, 250);
 }
@@ -278,9 +252,8 @@ function _createCameraLight() {
     _cameraLight.shadow.bias = 0;
     _cameraLight.shadow.normalBias = 0.02;
     _cameraLight.shadow.radius = 4;
-    // Плотность тени на мешах модели: по умолчанию 1.0 (полная тень).
-    // Устанавливаем из сохранённого состояния — иначе при первом включении
-    // плагина тень на модели была бы полной (1.0), а на полу — _shadowOpacity.
+    // Плотность тени на мешах модели: устанавливаем из сохранённого состояния,
+    // иначе при первом включении тень на модели была бы полной (1.0), а на полу — _shadowOpacity.
     if (typeof _cameraLight.shadow.intensity === 'number') {
         _cameraLight.shadow.intensity = _shadowOpacity;
     }
@@ -301,21 +274,9 @@ function _removeCameraLight() {
 
 /**
  * Находим в сцене сторонние источники света (созданные в engine.js setupLights),
- * которые «заливают» тень на модели светом:
- *   - AmbientLight (1.4) — равномерный фоновый свет, видимый в тени;
- *   - DirectionalLight снизу (1.3, position (0,-10,0)) — fillLight, освещает
- *     нижнюю часть модели и также виден в тени.
- *
- * Без компенсации этих источников тень на мешах модели при shadowOpacity=1
- * остаётся полупрозрачной (остаётся ~70% освещённости), тогда как тень на полу
- * (через ShadowMaterial) становится полностью чёрной. Это создаёт визуальное
- * несоответствие, описанное пользователем.
- *
- * Решение: при росте shadowOpacity пропорционально уменьшать интенсивность
- * этих источников, чтобы тень на модели визуально соответствовала тени на полу.
- * При shadowOpacity=0 — исходная интенсивность; при shadowOpacity=1 — 25%
- * от исходной (тень становится тёмной, но не абсолютно чёрной — иначе сцена
- * выглядит неестественно).
+ * которые «заливают» тень на модели светом: AmbientLight и fillLight (DirectionalLight
+ * с position.y<0). Без компенсации при shadowOpacity=1 тень на мешах остаётся
+ * полупрозрачной, тогда как тень на полу (ShadowMaterial) становится полностью чёрной.
  */
 function _discoverAmbientLights() {
     if (!_api || !_api.scene) return;
@@ -329,12 +290,8 @@ function _discoverAmbientLights() {
             _ambientLight = obj;
             _ambientLightBaseIntensity = obj.intensity;
         } else if (obj.isDirectionalLight && obj !== _cameraLight) {
-            // FillLight в engine.js имеет position (0,-10,0) — направление вверх.
-            // Основной DirectionalLight в engine.js имеет position (0,50,0) — направление вниз.
-            // Компенсируем fillLight (тот, что светит снизу), потому что он сильнее
-            // всего «заливает» тень на нижних гранях модели. Основной DirectionalLight
-            // сверху не так критичен — он не заливает тень от _cameraLight, потому что
-            // их направления различны.
+            // FillLight в engine.js светит снизу и сильнее всего «заливает»
+            // тень на нижних гранях — компенсируем именно его.
             if (obj.position.y < 0 && !_fillLight) {
                 _fillLight = obj;
                 _fillLightBaseIntensity = obj.intensity;
@@ -343,22 +300,12 @@ function _discoverAmbientLights() {
     });
 }
 
-/**
- * Коэффициент компенсации фоновых источников света в зависимости от плотности тени.
- * При shadowOpacity=0 → k=1.0 (без компенсации, исходная яркость).
- * При shadowOpacity=1 → k=0.25 (яркость падает до 25%, тень становится тёмной).
- * Нелинейная (квадратичная) кривая: компенсация ощутима только при высоких
- * значениях плотности, чтобы при 0-30% ползунка сцена оставалась хорошо освещённой.
- */
+/** Коэффициент компенсации фоновых источников света в зависимости от плотности тени. */
 function _ambientCompensation(shadowOpacity) {
-    // k = 1 - opacity^1.5 * 0.75
-    // При opacity=0: k=1.0
-    // При opacity=0.5: k=1 - 0.354*0.75 = 0.735 (близко к исходному)
-    // При opacity=1.0: k=0.25 (тень становится тёмной)
     return 1.0 - Math.pow(shadowOpacity, 1.5) * 0.75;
 }
 
-// E12: переиспользуемые объекты горячего пути солнца (раньше создавались на каждый вызов).
+// Переиспользуемые объекты горячего пути солнца.
 const _sunTargetPos = new THREE.Vector3();
 const _sunCameraPos = new THREE.Vector3();
 const _sunOffset = new THREE.Vector3();
@@ -367,13 +314,12 @@ const _sunBox = new THREE.Box3();
 const _sunSize = new THREE.Vector3();
 const _sunCorner = new THREE.Vector3();
 
-// E13: кэш геометрической части солнца (radius AABB, modelMaxXZ, modelSize, heightAboveFloor).
-// Зависит только от модели/пола; камеры/стены пересчитывают дешёвую часть.
-// Инвалидация: _onModelTransformed и при изменении высоты пола.
+// Кэш геометрической части солнца (radius AABB, modelMaxXZ, modelSize, heightAboveFloor).
+// Инвалидируется при _onModelTransformed и при изменении высоты пола.
 let _sunGeomCache = null;
 function _invalidateSunGeomCache() { _sunGeomCache = null; }
 
-/** E2: запрашивает один проход карты теней перед следующим рендером (autoUpdate=false). */
+/** Запрашивает один проход карты теней перед следующим рендером (autoUpdate=false). */
 function _requestShadowUpdate() {
     if (_api && _api.renderer) _api.renderer.shadowMap.needsUpdate = true;
 }
@@ -418,7 +364,7 @@ function _updateSunPosition() {
 
     // Фрустум автоподгоняется под модель: radius = макс. расстояние от прицела света
     // до углов AABB. Полразмер radius накрывает всю модель и её тень при любом азимуте/высоте.
-    // E13: обход модели (Box3 + 8 углов) только при отсутствии кэша.
+    // Обход модели (Box3 + 8 углов) только при отсутствии кэша.
     if (!_sunGeomCache) {
         const box = _sunBox.setFromObject(_api.model);
         const size = box.getSize(_sunSize);
@@ -449,7 +395,7 @@ function _updateSunPosition() {
     }
     const { radius, heightAboveFloor, modelMaxXZ, modelSize } = _sunGeomCache;
 
-    // Стены расширяют фрустум (AR: тень на стене). E13: дешёвый расчёт без обхода модели.
+    // Стены расширяют фрустум (AR: тень на стене) — без обхода модели.
     let wallExtent = 0;
     for (const id of ['back', 'right', 'left']) {
         if (_walls[id]?.enabled) {
@@ -469,7 +415,6 @@ function _updateSunPosition() {
     shadowCam.right = frustumSize;
     shadowCam.top = frustumSize;
     shadowCam.bottom = -frustumSize;
-    // near/far по фактической оси «свет → модель».
     shadowCam.near = Math.max(0.5, axisDist - radius * 2);
     // Знаменатель ограничен снизу 0.2 — иначе far улетает в бесконечность у горизонта.
     shadowCam.far = axisDist + radius * 2 + heightAboveFloor / Math.max(dirY, 0.2)
@@ -496,30 +441,16 @@ function _updateSunPosition() {
 }
 
 function _applyShadowOpacity() {
-    // 1. Тень на полу и стенах: это отдельные плоскости с ShadowMaterial,
-    //    их прозрачность регулируется через material.opacity.
+    // Тень на полу и стенах: прозрачность ShadowMaterial.
     if (_shadowPlane?.material) _shadowPlane.material.opacity = _shadowOpacity;
     for (const id of ['back', 'right', 'left']) {
         if (_walls[id]?.receiver?.material) _walls[id].receiver.material.opacity = _shadowOpacity;
     }
-    // 2. Тень на самой модели (мешы с receiveShadow:true): её плотность
-    //    определяется не материалом меша, а интенсивностью тени в shadow map.
-    //    Начиная с three.js r155 у LightShadow появилось свойство `intensity`
-    //    (по умолчанию 1.0) — оно управляет mix(1.0, shadow, intensity) в шейдере
-    //    и применяется ко всем объектам, получающим тень, включая саму модель.
-    //    Именно поэтому ранее ползунок «Плотность» менял тень на полу, но не
-    //    менял тень, которую модель бросает сама на себя (на своих мешах).
+    // Тень на мешах модели: управляется через LightShadow.intensity (three.js r155+).
     if (_cameraLight?.shadow) {
         _cameraLight.shadow.intensity = _shadowOpacity;
     }
-    // 3. Компенсация фоновых источников света (AmbientLight, FillLight):
-    //    при shadowOpacity=1 тень на модели через shadow.intensity становится
-    //    «математически полной», но визуально остаётся полупрозрачной, потому
-    //    что AmbientLight и FillLight заливают тень светом (~70% освещённости).
-    //    Уменьшаем их пропорционально, чтобы тень на модели стала сравнимо
-    //    тёмной с тенью на полу. Используем нелинейную кривую, чтобы при малых
-    //    значениях ползунка (0-30%) компенсация была минимальной и сцена
-    //    оставалась хорошо освещённой.
+    // Компенсация AmbientLight и FillLight — иначе они заливают тень светом.
     const k = _ambientCompensation(_shadowOpacity);
     if (_ambientLight) _ambientLight.intensity = _ambientLightBaseIntensity * k;
     if (_fillLight)    _fillLight.intensity    = _fillLightBaseIntensity    * k;
@@ -685,18 +616,11 @@ function _updateFloorBounds() {
 // ВИРТУАЛЬНЫЕ СТЕНЫ (для AR: ловят тень модели, не отбрасывают свою)
 // ============================================================
 //
-// receiver  (ShadowMaterial, castShadow:false, receiveShadow:true) — рисует тень
-//           модели на стене, сама тень не отбрасывает.
-// floorLine — золотистая линия на полу (видна при открытой панели).
-//
-// Стены упираются друг в друга: back обрезается по left/right, right/left — по back.
-// Пол ограничен стенами (см. _updateFloorBounds) — тень стены падает вне пола.
-//
-// Ориентация фиксируется в момент включения первой стены (_ensureWallReference):
-// back ставится за моделью перпендикулярно оси камеры; после фиксации поворот
-// модели и движение камеры стены не двигают (критично для AR — совпадение с реальной
-// стеной). Слайдер «Поворот стен» доворачивает вокруг центра. При выключении всех
-// стен база сбрасывается. Fallback при вертикальном взгляде — азимут камеры.
+// receiver (ShadowMaterial) — тень модели на стене; floorLine — линия на полу.
+// Стены упираются друг в друга (back обрезается по left/right и наоборот),
+// пол ограничен стенами (см. _updateFloorBounds). Ориентация фиксируется при
+// включении первой стены (_ensureWallReference) и дальше не зависит от камеры;
+// слайдер «Поворот стен» доворачивает вокруг центра.
 
 /**
  * Возвращает актуальную ориентацию стены с учётом зафиксированной базы
@@ -925,7 +849,7 @@ function _setWallEnabled(wallId, enabled) {
         if (!_walls[wallId].receiver) _createWall(wallId);
     } else {
         _removeWall(wallId);
-        // Все стены выключены — база сбрасывается, следующее включение зафиксует её заново.
+        // Все стены выключены — база сбрасывается, следующее включение зафиксирует её заново.
         if (!_walls.back.enabled && !_walls.right.enabled && !_walls.left.enabled) _wallRef = null;
     }
     // Включение/выключение меняет границы пола и ширину соседних стен.
@@ -1080,6 +1004,16 @@ function _applyRoughness(value) {
     _renderOnce();
 }
 
+/** Синхронизирует цвет/метальность/шероховатость с ui.settings — единый
+ *  источник истины для montage, cutting-3d и 3d-viewer.js. */
+function _syncUISettings(patch) {
+    if (!_api || !_api.store) return;
+    const current = _api.store.getState('ui.settings') || {};
+    const next = { ...current, ...patch };
+    _api.store.setState('ui.settings', next, { silent: true });
+    try { localStorage.setItem('uiSettings', JSON.stringify(next)); } catch (e) { /* noop */ }
+}
+
 /** Мгновенный рендер — без него слайдеры отстают (idle-цикл рисует 1 fps). */
 function _renderOnce() {
     if (_api && _api.renderer && _api.scene && _api.camera) {
@@ -1132,9 +1066,7 @@ function _setShadowElevation(deg) {
 function _setShadowOpacity(val) {
     _shadowOpacity = THREE.MathUtils.clamp(val, OPACITY_MIN, OPACITY_MAX);
     _applyShadowOpacity();
-    // Карта теней не пересчитывается (тень та же) — но uniforms shadowIntensity
-    // у шейдера мешей меняется через _applyShadowOpacity(), поэтому достаточно
-    // одного рендера кадра, чтобы увидеть результат.
+    // Достаточно одного рендера кадра: тень та же, меняются только uniforms.
     _renderOnce();
     _updateSunPanelUI();
     _saveState();
@@ -1449,7 +1381,7 @@ function _updateWallPanelUI() {
 }
 
 // ============================================================
-// СОБЫТИЙНЫЕ ОБНОВЛЕНИЯ (E2/E8: _onFrame удалён, плагин полностью событийный)
+// СОБЫТИЙНЫЕ ОБНОВЛЕНИЯ (плагин полностью событийный, без _onFrame)
 // ============================================================
 
 /** Камера сдвинулась (OrbitControls 'change'): солнце следует за камерой,
@@ -1498,6 +1430,7 @@ function _applyColor() {
     const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
     _applyModelColor(hex);
     _updateSwatch(hex);
+    _syncUISettings({ modelColor: hex });
     _saveState();
     _renderOnce();
 }
@@ -1902,7 +1835,7 @@ function _createColorPanel() {
 
     /**
      * Тап/клик активирует перетаскивание; движение документа обновляет значение;
-     * отпускание деактивирует. E13: слушатели живут только во время drag.
+     * отпускание деактивирует. Слушатели живут только во время drag.
      * @param el        элемент-трек
      * @param isActive  getter флага активности
      * @param setActive setter флага
@@ -1988,6 +1921,7 @@ function _createColorPanel() {
             _metalness = clamp01((cy - rect.top) / rect.height);
             _updateMRUI();
             _applyMetalness(_metalness);
+            _syncUISettings({ modelMetalness: _metalness });
             _saveState();
         }
     );
@@ -2002,6 +1936,7 @@ function _createColorPanel() {
             _roughness = clamp01((cy - rect.top) / rect.height);
             _updateMRUI();
             _applyRoughness(_roughness);
+            _syncUISettings({ modelRoughness: _roughness });
             _saveState();
         }
     );
@@ -2092,18 +2027,12 @@ function _init(api) {
     _createGrid();
     _createEdges();
 
-    // 2a. Находим сторонние источники света (созданы в engine.js setupLights),
-    // чтобы компенсировать их при изменении плотности тени.
-    // Без этого AmbientLight и FillLight «заливают» тень светом, и она
-    // остаётся полупрозрачной даже при shadowOpacity=1.
     _discoverAmbientLights();
 
-    // 3. Применяем настройки
     _applyShadowOpacity();
     _updateSunPosition();
-    _updateGridOrientation(); // начальная видимость сетки по текущему направлению взгляда
+    _updateGridOrientation();
 
-    // 3a. Подписки событийной модели (снимаются в _cleanup через _boundHandlers).
     if (_api.controls) {
         _api.controls.addEventListener('change', _onControlsChange);
         _boundHandlers.push({ el: _api.controls, type: 'change', handler: _onControlsChange });
@@ -2113,10 +2042,8 @@ function _init(api) {
     window.addEventListener('model-visibility-changed', _onModelVisibilityChanged);
     _boundHandlers.push({ el: window, type: 'model-visibility-changed', handler: _onModelVisibilityChanged });
 
-    // 4. CSS для pill-bar
     _injectStyles();
 
-    // 5. Начальный цвет
     const pluginColor = saved?.modelColor;
     const settingsColor = _api.store.getState('ui.settings')?.modelColor;
     const currentColor = pluginColor || settingsColor || '#cccccc';
@@ -2124,8 +2051,8 @@ function _init(api) {
     const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
     _hue = hsv.h; _sat = hsv.s; _val = hsv.v;
     _applyModelColor(currentColor);
+    _syncUISettings({ modelColor: currentColor });
 
-    // 6. Металличность и шероховатость
     const uiSettings = _api.store.getState('ui.settings') || {};
     _metalness = (saved?.metalness !== undefined) ? saved.metalness
         : (uiSettings.modelMetalness !== undefined ? uiSettings.modelMetalness : 0.1);
@@ -2133,6 +2060,7 @@ function _init(api) {
         : (uiSettings.modelRoughness !== undefined ? uiSettings.modelRoughness : 0.75);
     _applyMetalness(_metalness);
     _applyRoughness(_roughness);
+    _syncUISettings({ modelMetalness: _metalness, modelRoughness: _roughness });
 
     // 7. Восстанавливаем включённые стены. Базу снимает _ensureWallReference
     //    при первом _setWallEnabled(id, true).
@@ -2208,8 +2136,6 @@ PluginManager.register({
     id: 'view-display',
     name: 'Вид',
     icon: 'image',
-    // module — не указывается; привязку к модулю задаёт администратор
-    // в js/plugins/registry.js через PluginManager.bindModules().
 
     meta: {
         autoStart: true,
@@ -2227,8 +2153,6 @@ PluginManager.register({
     destroy() {
         _cleanup();
     },
-
-    // onFrame удалён — плагин полностью событийный.
 
     panel: {
         className: 'plugin-pill',

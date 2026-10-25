@@ -273,8 +273,6 @@ PluginManager.register({
     id: 'center-of-mass',
     name: 'Центр масс',
     icon: 'center-mass',
-    // module — не указывается; привязку к модулю задаёт администратор
-    // в js/plugins/registry.js через PluginManager.bindModules().
 
     /** Показывать кнопку только когда модель загружена. */
     condition: (api) => !!(api && api.model),

@@ -7,10 +7,6 @@
 import * as THREE from 'three';
 import PluginManager from '../plugin-system.js';
 
-// ============================================================
-// СОСТОЯНИЕ ПЛАГИНА
-// ============================================================
-
 let _api = null;
 let _videoEl = null;
 let _stream = null;
@@ -19,34 +15,26 @@ let _container = null;
 let _cleanedUp = false;
 
 // Счётчик поколений сессии: await'ы после resume сверяют поколение с актуальным
-// и гасят устаревший поток, чтобы не держать камеру вечно (критичный баг C2).
+// и гасят устаревший поток, чтобы не держать камеру вечно.
 let _cameraGeneration = 0;
 
-// Обработчик видимости вкладки (регистрируется в init, снимается в _cleanup).
 let _visibilityHandler = null;
 
-// FOV
 let _originalFov = 50;
-let _originalCameraPos = null; // позиция камеры на момент активации плагина
+let _originalCameraPos = null;
 const FOV_MIN = 15;
 const FOV_MAX = 90;
 
-// Пауза камеры (фиксация кадра)
 let _cameraFrozen = false;
-let _frozenCanvas = null; // замороженный кадр в высоком разрешении
+let _frozenCanvas = null;
 let _isCapturing = false;
 let _uploadedBgUrl = null;
-let _freezeBgUrl = null;  // Blob URL замороженного кадра для CSS-фона
+let _freezeBgUrl = null;
 
-// Магические числа
 const FREEZE_JPEG_QUALITY = 0.80;
 const TOAST_DURATION = 4000;
 const TOAST_FADE = 300;
 const FLASH_DURATION = 300;
-
-// ============================================================
-// РАБОТА С КАМЕРОЙ
-// ============================================================
 
 // Скрытая вкладка не должна держать конвейер камеры: снимаем только pipeline
 // (video.pause() + track.enabled=false), дорожки НЕ останавливаем — иначе AR-сессия
@@ -54,7 +42,6 @@ const FLASH_DURATION = 300;
 function _handleVisibilityChange() {
     const video = _videoEl;
     const stream = _stream;
-    // Заморозка/фото-фон живого потока не имеют — им пауза не нужна
     if (!video || !stream) return;
 
     if (document.hidden) {
@@ -72,8 +59,13 @@ async function _startCamera() {
     const generation = ++_cameraGeneration;
     _stopCamera();
 
+    // navigator.mediaDevices доступен только в безопасных контекстах (HTTPS/localhost).
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        _showCameraError(new Error('Камера недоступна в этом контексте (нужен HTTPS или localhost).'));
+        return;
+    }
+
     try {
-        // Запрашиваем фото-сенсор 4:3 (идеал — что даст камера)
         const constraints = {
             video: {
                 facingMode: 'environment',
@@ -84,15 +76,14 @@ async function _startCamera() {
             audio: false
         };
 
-        // aspectRatio поддерживается не везде (Firefox, старые мобильные)
-        if (navigator.mediaDevices.getSupportedConstraints().aspectRatio) {
+        // aspectRatio поддерживается не везде (Firefox, старые мобильные).
+        if (navigator.mediaDevices.getSupportedConstraints?.().aspectRatio) {
             constraints.video.aspectRatio = { ideal: 4 / 3 };
         }
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
-        // Если за время await плагин деактивировали/перезапустили — гасим поток
-        // немедленно, иначе камера останется включённой навсегда (C2).
+        // Если за время await плагин деактивировали/перезапустили — гасим поток немедленно.
         if (generation !== _cameraGeneration || _cleanedUp) {
             stream.getTracks().forEach(track => track.stop());
             return;
@@ -753,8 +744,6 @@ PluginManager.register({
     id: 'camera-background',
     name: 'Камера (AR)',
     icon: 'camera',
-    // module — не указывается; привязку к модулю задаёт администратор
-    // в js/plugins/registry.js через PluginManager.bindModules().
 
     condition: () => true,
 

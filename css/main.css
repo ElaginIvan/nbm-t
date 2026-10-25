@@ -1,6 +1,0 @@
-/* css/main.css
- * Все стили подключаются через <link> в index.html / project.html
- * (последовательные @import замедляли первую отрисовку — waterfall).
- * Порядок: base → components → gallery → cutting → model-cutting-panel
- *          → settings → measure → animation → transform-gizmo → camera-background
- */

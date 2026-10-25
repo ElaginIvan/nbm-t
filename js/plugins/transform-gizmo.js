@@ -43,24 +43,17 @@ let originalSelection = null;
 let hierarchyDirection = 'up';
 
 let _floatingContainer = null;
-// E6: обновление по событиям, без вечного rAF-поллинга
-let _floatUpdatePending = false;      // коалисция нескольких событий в один кадр
-let _floatWorldPos = null;            // переиспользуемый вектор (без аллокаций на событие)
+let _floatUpdatePending = false;      // коалисция событий в один кадр
+let _floatWorldPos = null;            // переиспользуемый вектор
 let _floatDropEl = null;
 let _floatRotEl = null;
-// Фоновый режим: гизмо, траектория и подсветка выделения спрятаны onPause,
-// чтобы не отвлекать поверх чужого плагина. Флаг отличает «спрятали мы» от
-// «пользователь скрыл сам» и гарантирует возврат только того, что прятали.
-// selectedObjects при этом НЕ чистится — выделение как данные переживает паузу,
-// при onResume подсветка восстанавливается по этому списку.
+// Фоновый режим: гизмо, траектория и подсветка спрятаны onPause, при onResume
+// восстанавливаются. selectedObjects переживает паузу как данные.
 let _visualsHiddenByPause = false;
 
-// ============================================================
-// Ф1: Точный ввод смещения / поворота
-// Поля показывают смещение (мм) или угол (°) при перетаскивании гизмо;
-// ручной ввод + Enter применяет значение по мировым осям.
-// Единицы: UI=мм/градусы, сцена=метры (×1000). Порядок осей 'YXZ'.
-// ============================================================
+// Поля точного ввода: показывают смещение (мм) или угол (°) при перетаскивании гизмо.
+// Ручной ввод + Enter применяет значение по мировым осям. Единицы: UI=мм/градусы,
+// сцена=метры (×1000). Порядок осей 'YXZ'.
 const PRECISE_STORAGE_KEY = 'transformGizmo.preciseInput';
 const PRECISE_UNIT_LABEL = 'мм';
 const PRECISE_MM_PER_UNIT = 1000; // glTF 2.0: 1 единица сцены = 1 метр
@@ -79,7 +72,7 @@ let _preciseUnitEl = null;   // подпись единицы в панели: �
 let _preciseLastDisplayed = { x: 0, y: 0, z: 0 }; // последние показанные значения (Esc — отмена правки)
 let _preciseEditing = false; // фокус в поле ввода — живые обновления не затирают ручной ввод
 let _preciseInvalidTimer = null;
-// Применяются только dirty-поля: значения читout (прошлый жест) не повторяются.
+// Применяются только dirty-поля: значения с прошлого жеста не повторяются.
 let _preciseDirty = { x: false, y: false, z: false };
 
 function _resetHierarchy() {
@@ -120,10 +113,25 @@ function getSelectableMeshes() {
     return meshes;
 }
 
+// Попадание на отсекаемой стороне сечения: clipping planes режут геометрию
+// только при рендере, raycaster про них не знает. Плоскости берём из материала;
+// без сечения clippingPlanes пусты и фильтр — no-op (самодостаточность).
+function _isHitClippedBySection(hit) {
+    const mats = Array.isArray(hit.object.material) ? hit.object.material : [hit.object.material];
+    for (let mi = 0; mi < mats.length; mi++) {
+        const planes = mats[mi] && mats[mi].clippingPlanes;
+        if (!planes || planes.length === 0) continue;
+        for (let i = 0; i < planes.length; i++) {
+            if (planes[i].distanceToPoint(hit.point) < -1e-4) return true;
+        }
+    }
+    return false;
+}
+
 /** Событие «модель сдвинута/повернута» — плагины с кэшами мировой геометрии сбрасывают кэши. */
 function _notifyModelTransformed() {
     window.dispatchEvent(new CustomEvent('model-transformed'));
-    _scheduleFloatingUpdate(); // E6: модель сдвинута — позиция кнопок изменилась
+    _scheduleFloatingUpdate();
 }
 
 function setWorldPosition(obj, worldPos) {
@@ -188,8 +196,7 @@ function highlightObject(obj) {
         swapped = true;
     }
     if (!swapped) return;
-    // КОНТРАКТ ВЛАДЕНИЯ МАТЕРИАЛАМИ: подмена пишется в стек userData.materialOwners,
-    // владелец восстанавливает оригинал при снятии; порядок снятия подмен не критичен.
+    // Подмена пишется в стек userData.materialOwners; возврат — LIFO.
     const stack = obj.userData.materialOwners || (obj.userData.materialOwners = []);
     stack.push({ owner: 'transform-gizmo', saved: originals });
     highlightState.set(obj, {
@@ -205,7 +212,7 @@ function unhighlightObject(obj) {
     for (const m of cloned) {
         if (m && typeof m.dispose === 'function') m.dispose();
     }
-    // Возврат по контракту: только если наша подмена верхняя (LIFO), иначе чужой владелец вернёт свою.
+    // Возврат только если наша подмена верхняя (LIFO).
     const stack = obj.userData?.materialOwners;
     const idx = stack ? stack.findIndex(e => e.owner === 'transform-gizmo') : -1;
     if (stack && idx !== -1) {
@@ -231,7 +238,6 @@ function toggleSelectObject(obj) {
     updateGizmoAttachment();
     updateSelectUpButton();
     updateSelectUpIcon();
-    // Ф1: новое выделение — поля смещения с нуля, панель по правилам видимости
     if (preciseMode) resetPreciseFields();
     _updatePrecisePanel();
 }
@@ -245,8 +251,8 @@ function clearSelection() {
     detachGizmo();
     updateSelectUpButton();
     updateSelectUpIcon();
-    _scheduleFloatingUpdate(); // E6: выделение снято — прячем кнопки
-    if (preciseMode) resetPreciseFields(); // Ф1
+    _scheduleFloatingUpdate();
+    if (preciseMode) resetPreciseFields();
     _updatePrecisePanel();
 }
 
@@ -335,10 +341,9 @@ function removePivot() {
 function onDraggingChanged(event) {
     controls.enabled = !event.value;
     isDragging = event.value;
-    _scheduleFloatingUpdate(); // E6: начало драга прячет кнопки, конец — возвращает
+    _scheduleFloatingUpdate();
     if (event.value) {
         saveDragStartState();
-        // Ф1: новый жест — отсчёт с нуля, панель подсвечена (смещение и поворот)
         if (preciseMode) {
             resetPreciseFields();
             if (_precisePanelEl) _precisePanelEl.classList.add('dragging');
@@ -347,16 +352,14 @@ function onDraggingChanged(event) {
         if (dragStartState && showTrail && currentMode === 'translate') {
             updateTrailRealTime();
         }
-        // Ф1: финальная величина остается в полях до следующего жеста
         if (preciseMode) {
             _updatePreciseFromDrag(); // вызов ДО сброса dragStartState
             if (_precisePanelEl) _precisePanelEl.classList.remove('dragging');
         }
         dragStartState = null;
         _gizmoJustReleased = true;
-        // Флаг сбросится сам через 250 мс — иначе проглотится следующий легитимный клик
+        // Сбросится сам через 250 мс — иначе проглатывается следующий клик.
         setTimeout(() => { _gizmoJustReleased = false; }, 250);
-        // Модель сдвинута — уведомляем плагины с кэшами мировой геометрии
         _notifyModelTransformed();
     }
 }
@@ -405,7 +408,6 @@ function onObjectChange() {
         updateTrailRealTime();
     }
     updateTrailVisuals();
-    // Ф1: живой читout величины смещения в панели точного ввода
     if (preciseMode) _updatePreciseFromDrag();
 }
 
@@ -596,8 +598,8 @@ function applyHierarchySelection() {
     updateGizmoAttachment();
     updateSelectUpButton();
     updateSelectUpIcon();
-    _scheduleFloatingUpdate(); // E6: выделение изменилось — позиция/видимость кнопок
-    if (preciseMode) resetPreciseFields(); // Ф1: иерархия сменилась — отсчет заново
+    _scheduleFloatingUpdate();
+    if (preciseMode) resetPreciseFields();
     _updatePrecisePanel();
 }
 
@@ -653,6 +655,10 @@ function _floatBtnBaseStyle() {
 function _createFloatingButtons() {
     _floatingContainer = document.createElement('div');
     _floatingContainer.style.cssText = 'position:fixed;pointer-events:none;z-index:1000;display:flex;gap:5px;transform:translate(-50%,calc(-100% - 100px));opacity:0;';
+    // Маркер плагинового оверлея: контейнер живёт в document.body (вне
+    // .plugin-panels), по этому атрибуту ядро (спецификация) отличает клики
+    // по плагиновым кнопкам от «клика мимо таблицы» и не сбрасывает мультивыбор.
+    _floatingContainer.setAttribute('data-plugin-overlay', 'transform-gizmo');
     const dropBtn = document.createElement('button');
     dropBtn.id = 'gizmo-float-drop';
     dropBtn.title = 'Опустить на пол';
@@ -686,7 +692,6 @@ function _createFloatingButtons() {
     _floatRotEl = rotGroup;
     document.body.appendChild(_floatingContainer);
     _floatWorldPos = new THREE.Vector3();
-    // E6: обновления — событийные через _scheduleFloatingUpdate, без вечного rAF.
 }
 
 function _hideFloatingButtons() {
@@ -695,26 +700,22 @@ function _hideFloatingButtons() {
     _floatingContainer.style.pointerEvents = 'none';
 }
 
-/** E6: обновление позиции/видимости плавающих кнопок (вместо вечного rAF-поллинга). */
+/** Обновление позиции/видимости плавающих кнопок. */
 function _updateFloatingButtons() {
-    // Ф1: панель точного ввода обновляется по тем же событиям, но живет
-    // по своим правилам видимости (не зависит от камеры/драга)
     if (_precisePanelEl) _updatePrecisePanel();
     if (!_floatingContainer || !transformControls) return;
     const gizmoObj = transformControls.object;
-    // Фоновый режим: контейнер живёт в document.body вне оверлей-трекинга
-    // plugin-system — скрываем и деактивируем клики по общему контракту
+    // В фоновом режиме — скрываем (контейнер живёт в document.body вне трекинга plugin-system).
     if (PluginManager.isPluginPaused('transform-gizmo') ||
         !gizmoObj || selectedObjects.length === 0 || isDragging) {
         _hideFloatingButtons();
         return;
     }
-    // Свежие матрицы: событие приходит между кадрами рендера
     gizmoObj.updateWorldMatrix(true, false);
     camera.updateMatrixWorld();
     const projected = gizmoObj.getWorldPosition(_floatWorldPos).project(camera);
     if (projected.z > 1) {
-        _hideFloatingButtons(); // pointerEvents: none — невидимые кнопки не ловят клики позади камеры
+        _hideFloatingButtons();
         return;
     }
     const rect = renderer.domElement.getBoundingClientRect();
@@ -736,7 +737,7 @@ function _scheduleFloatingUpdate() {
     });
 }
 
-/** E6: ловим переход активный/фоновый — capture + setTimeout(0) ждёт обработки клика менеджером. */
+/** Ловим переход активный/фоновый — capture + setTimeout(0) ждёт обработки клика менеджером. */
 function _onDocClickCapture() {
     setTimeout(() => {
         if (!_floatingContainer) return;
@@ -795,7 +796,7 @@ function dropToFloor() {
     }
     updateGizmoAttachment();
     _notifyModelTransformed();
-    if (preciseMode) resetPreciseFields(); // Ф1: позиция изменилась вне жеста — поля обнуляем
+    if (preciseMode) resetPreciseFields();
 }
 
 // --- Local CS alignment helpers ---
@@ -857,7 +858,7 @@ function rotateBy90(axis) {
         setWorldQuaternion(commonParent, newQuat);
         updateGizmoAttachment();
         _notifyModelTransformed();
-        if (preciseMode) resetPreciseFields(); // Ф1
+        if (preciseMode) resetPreciseFields();
         return;
     }
     const center = new THREE.Vector3();
@@ -887,7 +888,7 @@ function rotateBy90(axis) {
     }
     updateGizmoAttachment();
     _notifyModelTransformed();
-    if (preciseMode) resetPreciseFields(); // Ф1
+    if (preciseMode) resetPreciseFields();
 }
 
 function setMode(mode) {
@@ -895,10 +896,10 @@ function setMode(mode) {
     currentMode = mode;
     if (transformControls) transformControls.setMode(mode);
     updateModeButtons();
-    _scheduleFloatingUpdate(); // E6: видимость групп Drop/Rotate зависит от режима
-    if (changed) resetPreciseFields(); // Ф1: сменилась семантика полей (мм ↔ °)
-    _syncPrecisePanelMode(); // Ф1: единицы/тултипы панели под текущий режим
-    _updatePrecisePanel(); // Ф1: панель — в режимах «Перемещение» и «Поворот»
+    _scheduleFloatingUpdate();
+    if (changed) resetPreciseFields();
+    _syncPrecisePanelMode();
+    _updatePrecisePanel();
 }
 
 function toggleTrail() {
@@ -932,7 +933,7 @@ function togglePreciseMode() {
     } catch (e) { /* приватный режим — просто не сохраняем */ }
     updatePreciseButton();
     if (preciseMode) resetPreciseFields();
-    _syncPrecisePanelMode(); // Ф1: панель могла создаться/жить в другом режиме гизмо
+    _syncPrecisePanelMode();
     _updatePrecisePanel();
 }
 
@@ -969,7 +970,7 @@ function resetPreciseFields() {
     _resetPreciseDirty(); // новый жест/выделение — прежний ввод аннулируется
 }
 
-/** Живой читout при перетаскивании: среднее смещение выделения (мм) или дельта-угол (°) относительно начала жеста. */
+/** Живое значение при перетаскивании: среднее смещение выделения (мм) или дельта-угол (°) относительно начала жеста. */
 function _updatePreciseFromDrag() {
     if (!preciseMode || !dragStartState || dragStartState.objects.length === 0) return;
     if (currentMode === 'translate') {
@@ -1039,12 +1040,11 @@ function applyPreciseMove() {
     if (pivot) pivot.position.add(delta);
     updateGizmoAttachment();
     setPreciseFields(DX, DY, DZ);
-    _resetPreciseDirty(); // введённое применено — следующий ввод считается заново
-    // Модель сдвинута — контракты: кэши мировой геометрии плагинов + плавающие кнопки
+    _resetPreciseDirty();
     _notifyModelTransformed();
 }
 
-/** Применяет поворот на введённые углы (°) вокруг мировых X/Y/Z; R = Ry·Rx·Rz (как в читout 'YXZ'), вокруг точки гизмо. */
+/** Применяет поворот на введённые углы (°) вокруг мировых X/Y/Z; R = Ry·Rx·Rz (порядок 'YXZ'), вокруг точки гизмо. */
 function applyPreciseRotate() {
     if (!preciseMode || selectedObjects.length === 0 || !_preciseInputs) return;
     const rx = _preciseDirty.x ? _parsePrecise(_preciseInputs.x.value) : 0;
@@ -1387,8 +1387,6 @@ PluginManager.register({
     id: 'transform-gizmo',
     name: 'Перемещение',
     icon: 'cubes',
-    // module — не указывается; привязку к модулю задаёт администратор
-    // в js/plugins/registry.js через PluginManager.bindModules().
     condition: (pluginApi) => !!(pluginApi && pluginApi.model),
 
     init(pluginApi) {
@@ -1440,11 +1438,11 @@ PluginManager.register({
         _boundHandlers.push({ el: controls, type: 'start', handler: controlsStartHandler });
         _boundHandlers.push({ el: controls, type: 'change', handler: controlsChangeHandler });
 
-        // E6: ресайз меняет rect канваса — переобновляем позицию кнопок
+        // Ресайз меняет rect канваса — переобновляем позицию кнопок
         const resizeHandler = () => _scheduleFloatingUpdate();
         window.addEventListener('resize', resizeHandler);
         _boundHandlers.push({ el: window, type: 'resize', handler: resizeHandler });
-        // E6: фиксация переходов активный/фоновый плагина (см. _onDocClickCapture)
+        // Фиксация переходов активный/фоновый плагина (см. _onDocClickCapture)
         document.addEventListener('click', _onDocClickCapture, true);
         _boundHandlers.push({ el: document, type: 'click', handler: _onDocClickCapture, opts: true });
 
@@ -1459,8 +1457,12 @@ PluginManager.register({
             raycaster.setFromCamera(pointer, camera);
             const meshes = getSelectableMeshes();
             const hits = raycaster.intersectObjects(meshes, false);
-            if (hits.length > 0) {
-                toggleSelectObject(hits[0].object);
+            // Пропускаем попадания на отсекаемой стороне секущей плоскости:
+            // первый «живой» хит может стоять за срезом (замер/выбор через
+            // сечение — как в плагине измерения).
+            const pickableHits = hits.filter(h => !_isHitClippedBySection(h));
+            if (pickableHits.length > 0) {
+                toggleSelectObject(pickableHits[0].object);
             } else {
                 clearSelection();
             }
@@ -1551,12 +1553,8 @@ PluginManager.register({
             updatePreciseButton(); // Ф1: восстановить состояние кнопки из localStorage
         },
 
-        // При переключении на другой плагин — закрыть панель «Точный ввод»
-        // и спрятать 3D-гизмо + траекторию, чтобы они не висели поверх чужого
-        // активного плагина. Сам режим preciseMode сбрасываем (как при клике
-        // по кнопке), чтобы при возврате панель не висела раскрытой поверх
-        // чужого тулбара. Выделение, режим гизмо (move/rotate) и позиция
-        // сохраняются — плагин остаётся самодостаточным, возврат через onResume.
+        // Уход в фон: закрываем панель «Точного ввода» и прячем гизмо/траекторию,
+        // чтобы не висели поверх чужого тулбара. Выделение и режим сохраняются.
         onPause() {
             if (preciseMode) {
                 preciseMode = false;
@@ -1567,10 +1565,8 @@ PluginManager.register({
                 _syncPrecisePanelMode();
                 _updatePrecisePanel();
             }
-            // Прячем визуал плагина: 3D-гизмо (helper.visible=false убирает рукоятки,
-            // не трогая attach/detach), траекторию и подсветку выделения (emissive).
-            // Сами selectedObjects НЕ чистим — выделение как данные переживает паузу,
-            // при onResume подсветка восстанавливается по этому списку.
+            // Прячем визуал (гизмо, траекторию, подсветку); selectedObjects
+            // НЕ чистим — выделение переживает паузу как данные.
             if (!_visualsHiddenByPause) {
                 if (transformControls?.object) {
                     const helper = transformControls.getHelper();
@@ -1580,22 +1576,12 @@ PluginManager.register({
                 for (const obj of selectedObjects) unhighlightObject(obj);
                 _visualsHiddenByPause = true;
             }
-            // На всякий случай прячем и плавающие кнопки (дублирует защиту
-            // через isPluginPaused в _updateFloatingButtons — но onPause зовётся
-            // синхронно, без ожидания rAF).
+            // Синхронно прячем и плавающие кнопки (не дожидаясь rAF).
             _hideFloatingButtons();
         },
 
-        // Возврат из фона в активное состояние: показываем гизмо, траекторию и
-        // подсветку выделения обратно. Видимость восстанавливается по источникам
-        // истины:
-        //   helper.visible = true  — гизмо рисуется, если есть attach (иначе всё
-        //                            равно не виден — внутри TransformControls
-        //                            спрячет рукоятки при отсутствии object);
-        //   trailGroup.visible = showTrail — флаг режима «Траектория»;
-        //   highlightObject(obj) для каждого obj из selectedObjects — подсветка
-        //                            emissive возвращается по пережившему паузу списку.
-        // Сами selectedObjects и режим гизмо (move/rotate) не трогаем — они пережили паузу.
+        // Возврат из фона: показываем гизмо/траекторию/подсветку по источникам
+        // истины; selectedObjects и режим гизмо не трогаем.
         onResume() {
             if (_visualsHiddenByPause) {
                 if (transformControls?.object) {
@@ -1606,10 +1592,7 @@ PluginManager.register({
                 for (const obj of selectedObjects) highlightObject(obj);
                 _visualsHiddenByPause = false;
             }
-            // Плавающие кнопки и панель точного ввода обновятся по событиям
-            // (isPluginPaused уже false), но проще дернуть обновление явно —
-            // позиция кнопок зависит от текущей камеры/выделения, которые могли
-            // измениться, пока плагин был в фоне.
+            // Явное обновление кнопок/панели: камера/выделение могли измениться в фоне.
             _scheduleFloatingUpdate();
             _updatePrecisePanel();
         },

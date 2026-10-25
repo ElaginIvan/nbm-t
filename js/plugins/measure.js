@@ -4,13 +4,8 @@
  */
 
 import * as THREE from 'three';
-// CSS2DRenderer/CSS2DObject — именованные экспорты (THREE.CSS2DRenderer === undefined).
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/CSS2DRenderer.js';
 import PluginManager from '../plugin-system.js';
-
-// ============================================================
-// Конфигурация
-// ============================================================
 
 const isM = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 const CONFIG = {
@@ -22,10 +17,6 @@ const CONFIG = {
     smoothAngleThreshold: 0.5, coplanarDistThreshold: 0, scaleToMM: 1000
 };
 const typeLabels = { vertex: 'Верш.', edge: 'Ребро', face: 'Грань' };
-
-// ============================================================
-// Состояние плагина
-// ============================================================
 
 let _camera, _renderer, _controls, _scene, _model;
 let _container;
@@ -54,9 +45,9 @@ let _mouse = new THREE.Vector2();
 
 // События
 let _clickTimeout = null;
-let _confirmResetTimer = null;  // отложенный сброс после измерения (800 мс)
+let _confirmResetTimer = null;
 let _cameraMoveTimer = null;
-let _lastMouseMoveT = 0;        // троттлинг тяжёлого mousemove-снапа
+let _lastMouseMoveT = 0;
 let _touchMoved = false;
 let _touchStartPos = null;
 let _touchStartTime = 0;
@@ -85,6 +76,13 @@ let _resizeObserver = null;
 let _controlsStartHandler = null;
 let _controlsChangeHandler = null;
 
+// Режим «скрыто» для подсветки рёбер/граней у размеров и заполнения среза —
+// одна кнопка панели, работает и без сечения. Скрытое переживает паузу и
+// действует во всех плагинах; видимость возвращается только в destroy.
+let _sectionFillHidden = false;
+// Cap-плоскости, скрытые нами (восстанавливаются только они).
+let _hiddenFillMeshes = [];
+
 // ============================================================
 // Векторные утилиты
 // ============================================================
@@ -112,8 +110,14 @@ const formatAngle = d => String(parseFloat((Math.round(d * 10) / 10).toFixed(1))
 // Фабрика линий
 // ============================================================
 
-const makeLine = (pts, color, opts = {}) =>
-    new THREE.Line(
+// Линии measure — оверлеи (depthTest:false), поэтому рисуются после геометрии:
+// renderOrder выше модели (0) и служебных объектов сечения (stencil 1–3, cap 1.1–3.1).
+// Без этого порядок непрозрачной очереди зависел от material.id, и клонирование
+// материалов модели плагином сечения переворачивало его — модель закрывала линии.
+const LINE_RENDER_ORDER = 10;
+
+const makeLine = (pts, color, opts = {}) => {
+    const line = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(pts),
         new THREE.LineBasicMaterial({
             color,
@@ -123,6 +127,9 @@ const makeLine = (pts, color, opts = {}) =>
             depthTest: opts.depthTest ?? false
         })
     );
+    line.renderOrder = LINE_RENDER_ORDER;
+    return line;
+};
 
 // ============================================================
 // Утилиты выделения и проекции
@@ -177,13 +184,27 @@ function createDimLabel(group, dimStart, dimEnd, dimMid, dimDir, offsetDir, colo
 const addEdgeLine = (group, v1, v2, color, opacity = 0.6, linewidth = 1) =>
     group.add(makeLine([v1, v2], color, { opacity, linewidth }));
 
+/** Линия-подсветка выбранного элемента (ребро, контур дуги) в группе размера;
+ * помечается userData.edgeHighlight и гасится кнопкой граней сечения. */
+const addEdgeHighlightLine = (group, v1, v2, color, opacity = 0.6, linewidth = 1) => {
+    const line = makeLine([v1, v2], color, { opacity, linewidth });
+    line.userData.edgeHighlight = true;
+    line.visible = !_sectionFillHidden;
+    group.add(line);
+    return line;
+};
+
 function drawBoundaryLoops(group, meta, color, opacity, linewidth) {
     const loops = meta.boundaryLoops || (meta.boundary ? [meta.boundary] : null);
     if (!loops) return;
     for (const loop of loops) {
         if (loop.length > 2) {
             const pts = [...loop.map(v => v.clone()), loop[0].clone()];
-            group.add(makeLine(pts, color, { opacity: opacity ?? 1, linewidth: linewidth ?? 2 }));
+            const line = makeLine(pts, color, { opacity: opacity ?? 1, linewidth: linewidth ?? 2 });
+            // Обводка грани гасится кнопкой граней сечения (edgeHighlight).
+            line.userData.edgeHighlight = true;
+            line.visible = !_sectionFillHidden;
+            group.add(line);
         }
     }
 }
@@ -206,7 +227,7 @@ function buildOffsetDimensionLine(group, opts) {
     group.add(wMat);
     group.add(makeLine([feat2, extEnd2], CONFIG.measureColor, { opacity: 0.5 }));
     group.add(makeLine([dimStart, dimEnd], CONFIG.measureColor, { linewidth: 2 }));
-    opts.edgeLines?.forEach(e => addEdgeLine(group, e.v1, e.v2, e.color, e.opacity));
+    opts.edgeLines?.forEach(e => addEdgeHighlightLine(group, e.v1, e.v2, e.color, e.opacity));
     opts.boundaryLoops?.forEach(b => drawBoundaryLoops(group, b.meta, b.color, b.opacity, b.lw));
     const distVal = opts.lineStart.distanceTo(opts.lineEnd);
     const mid = midPt(dimStart, dimEnd);
@@ -471,7 +492,10 @@ const addArcContour = (group, arcInfo) => {
     if (!arcInfo?.points || arcInfo.points.length < 3) return;
     const pts = arcInfo.points.slice();
     if (arcInfo.isCircle) pts.push(arcInfo.points[0].clone());
-    group.add(makeLine(pts, CONFIG.edgeColor, { opacity: 0.5 }));
+    const line = makeLine(pts, CONFIG.edgeColor, { opacity: 0.5 });
+    line.userData.edgeHighlight = true; // контур дуги скрывается кнопкой граней сечения
+    line.visible = !_sectionFillHidden;
+    group.add(line);
 };
 
 function addCenterCrossToGroup(group, circleInfo) {
@@ -631,8 +655,8 @@ function createEdgeAngleArc(e1v, e2v, anglePos) {
     const ap = computeAnglePosDirs(d1, d2, angle, angleDeg, anglePos);
     addAngleArcParts(grp, center, ap.dir1, ap.dir2, normal, ap.angle, ap.angleDeg,
         Math.max(dist(e1v[0], e1v[1]), dist(e2v[0], e2v[1]), CONFIG.arcRadius * 1.5));
-    addEdgeLine(grp, e1v[0], e1v[1], CONFIG.edgeColor, 0.5, 2);
-    addEdgeLine(grp, e2v[0], e2v[1], CONFIG.edgeColor, 0.5, 2);
+    addEdgeHighlightLine(grp, e1v[0], e1v[1], CONFIG.edgeColor, 0.5, 2);
+    addEdgeHighlightLine(grp, e2v[0], e2v[1], CONFIG.edgeColor, 0.5, 2);
     return { group: grp, value: ap.angleDeg, center, arcNormal: normal };
 }
 
@@ -678,7 +702,7 @@ function createEdgeFaceAngleDimension(edgeSel, faceSel, anglePos) {
     const extLen = Math.max(dist(ev1, ev2) * 0.8, CONFIG.arcRadius * 1.5);
     const ap = computeAnglePosDirs(edgeProjOnPlane, edgeDir, angle, angleDeg, anglePos);
     addAngleArcParts(grp, ptOnEdge, ap.dir1, ap.dir2, arcNormal, ap.angle, ap.angleDeg, extLen);
-    addEdgeLine(grp, ev1, ev2, CONFIG.edgeColor, 0.5, 2);
+    addEdgeHighlightLine(grp, ev1, ev2, CONFIG.edgeColor, 0.5, 2);
     drawBoundaryLoops(grp, faceSel.meta, CONFIG.faceColor, 0.5, 2);
     return { group: grp, value: ap.angleDeg, center: ptOnEdge, arcNormal };
 }
@@ -940,9 +964,7 @@ function _addMeasurement(s1, s2) {
     _measurementsGroup.add(result.group);
     const id = ++_measureIdCounter;
     const isAngle = isAngleType(mType), isArc = isArcType(mType), isLinear = !isAngle && !isArc && mType !== 'face-area';
-    const mLabel = mType === 'face-area'
-        ? MEAS_TYPES[mType].label(result.value)
-        : (MEAS_TYPES[mType].label(result.value, ''));
+    const mLabel = MEAS_TYPES[mType].label(result.value, '');
 
     const meas = {
         id, mType, value: result.value, label: mLabel,
@@ -1176,11 +1198,8 @@ function _snapToElement(point, mesh) {
     if (checkV) return vRes; if (checkE) return eRes; return fRes;
 }
 
-// [Патч 2026-10-08] Попадание на отсекаемой стороне сечения (плагин cutting-3d)?
-// Clipping planes режут геометрию ТОЛЬКО при рендере — raycaster про них не знает
-// и ловит отрезанную часть модели. Плоскости берём из материала самого меша: это
-// ровно те planes, которыми объект отрисован, поэтому фильтр всегда согласован
-// с картинкой на экране. eps = 0.1 мм — страховка от численного шума на границе.
+// Попадание на отсекаемой стороне сечения: clipping planes режут геометрию
+// только при рендере, raycaster про них не знает. Плоскости берём из материала.
 function _hitClippedBySection(hit) {
     const mats = Array.isArray(hit.object.material) ? hit.object.material : [hit.object.material];
     for (let mi = 0; mi < mats.length; mi++) {
@@ -1198,8 +1217,7 @@ function _findSnapElement(ev) {
     _mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     _mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     _raycaster.setFromCamera(_mouse, _camera);
-    // recursive=false: иначе raycaster попадает в дочерние LineSegments рёбер вместо меша.
-    // Фильтр isMesh — защитный пояс на случай вложенных мешей.
+    // recursive=false — иначе ловим дочерние линии рёбер вместо меша.
     const allHits = _raycaster.intersectObjects(_meshObjects, false);
     const hits = allHits.filter(h => {
         if (!h.object.isMesh) return false;
@@ -1217,6 +1235,8 @@ function _findSnapElement(ev) {
 function _highlight(sel) {
     _clearHL();
     if (!sel) return;
+    // В режиме «скрыто» hover-подсветку не рисуем (маркер прилипания остаётся).
+    if (_sectionFillHidden) return;
     if (sel.type === 'edge' && sel.meta.vertices) {
         _edgeHighlight = makeLine(sel.meta.vertices, CONFIG.edgeColor, { linewidth: 2 });
         _edgeHighlight.renderOrder = 999;
@@ -1306,6 +1326,97 @@ function _toggleDimMode(measId) {
 }
 
 // ============================================================
+// Грани и рёбра сечения: вкл/выкл видимости
+// ============================================================
+//
+// Заполнение среза (cap-плоскости 'cap-*') создаёт плагин сечения, а подсветку
+// рёбер у размеров рисует сам этот плагин — обе гасятся одной кнопкой и без
+// всякого сечения. Ссылок на плагин сечения нет — самодостаточность.
+
+const SECTION_FILL_CAP_PREFIX = 'cap-';
+const SECTION_FILL_EYE_OPEN_SVG = `<svg><use xlink:href="assets/icons/sprite.svg#montage-eye"></use></svg>`;
+const SECTION_FILL_EYE_CLOSED_SVG = `<svg><use xlink:href="assets/icons/sprite.svg#eye-closed"></use></svg>`;
+
+function _findSectionFillMeshes() {
+    const caps = [];
+    if (!_scene) return caps;
+    _scene.traverse(node => {
+        if (node.isMesh && typeof node.name === 'string' && node.name.startsWith(SECTION_FILL_CAP_PREFIX)) {
+            caps.push(node);
+        }
+    });
+    return caps;
+}
+
+/** Скрыть/вернуть подсветку рёбер в группах размеров: обводки граней,
+ * линии выбранных рёбер, контуры дуг (помечены userData.edgeHighlight). */
+function _setEdgeHighlightsVisible(visible) {
+    for (const meas of _measurements) {
+        meas.group?.traverse(node => {
+            if (node.userData?.edgeHighlight) node.visible = visible;
+        });
+    }
+}
+
+/** Скрыть/вернуть заполнение среза и подсветку рёбер. Скрываются только сейчас
+ * видимые cap-плоскости (оси, выключенные самим сечением, не трогаем);
+ * подсветка рёбер гасится всегда — она есть и без сечения. */
+function _setSectionFillVisible(visible) {
+    if (visible) {
+        for (const cap of _hiddenFillMeshes) cap.visible = true;
+        _setEdgeHighlightsVisible(true);
+    } else {
+        // Дополняем список, а не перезаписываем: повторный вызов не должен
+        // терять учёт уже скрытых, иначе destroy не вернёт им видимость.
+        const caps = _findSectionFillMeshes();
+        const alive = new Set(caps);
+        _hiddenFillMeshes = _hiddenFillMeshes.filter(cap => alive.has(cap));
+        const ours = new Set(_hiddenFillMeshes);
+        for (const cap of caps) {
+            if (cap.visible && !ours.has(cap)) {
+                cap.visible = false;
+                _hiddenFillMeshes.push(cap);
+            }
+        }
+        _setEdgeHighlightsVisible(false);
+        _clearHL(); // гасим и текущую hover-подсветку ребра/грани
+    }
+}
+
+function _updateSectionFillButton() {
+    const btn = _toolbarEl?.querySelector('[data-action="section-fill"]');
+    if (!btn) return;
+    const caps = _findSectionFillMeshes();
+    // Устаревшие ссылки (caps исчезли) чистим, режим «скрыто» не сбрасываем:
+    // подсветка рёбер есть и без сечения.
+    if (_hiddenFillMeshes.length > 0) {
+        const alive = new Set(caps);
+        _hiddenFillMeshes = _hiddenFillMeshes.filter(cap => alive.has(cap));
+    }
+    if (_sectionFillHidden) {
+        btn.disabled = false;
+        btn.innerHTML = SECTION_FILL_EYE_CLOSED_SVG;
+        btn.title = 'Показать грани и рёбра';
+        btn.classList.remove('active');
+        return;
+    }
+    // Режим «показано»: гасит подсветку рёбер, при срезе — ещё и заполнение.
+    btn.disabled = false;
+    btn.innerHTML = SECTION_FILL_EYE_OPEN_SVG;
+    btn.title = caps.some(c => c.visible)
+        ? 'Скрыть грани и рёбра сечения'
+        : 'Скрыть подсветку рёбер граней';
+    btn.classList.add('active');
+}
+
+function _toggleSectionFill() {
+    _sectionFillHidden = !_sectionFillHidden;
+    _setSectionFillVisible(!_sectionFillHidden);
+    if (!_sectionFillHidden) _hiddenFillMeshes = [];
+    _updateSectionFillButton();
+}
+
+// ============================================================
 // Панель инструментов — состояние
 // ============================================================
 
@@ -1380,7 +1491,7 @@ function _handleInteraction(clientX, clientY) {
     if (!_firstSelection) {
         _firstSelection = snap;
         _firstMarker.visible = true;
-        _startPulseLoop(); // маркер видим — пульс работает только пока он не скрыт
+        _startPulseLoop();
         _firstMarker.position.copy(snap.point);
         const circleInfo = adjustSelectionToCircleCenter(snap);
         if (circleInfo) _firstMarker.position.copy(circleInfo.center);
@@ -1390,7 +1501,7 @@ function _handleInteraction(clientX, clientY) {
         if (snap.type === 'vertex' || snap.type === 'edge' || snap.type === 'face') {
             const meas = _addMeasurement(snap, null);
             if (meas) { _firstMeasId = meas.id; _updateToolbarState(); }
-        } else { _cancelSelection(); }
+        }
     } else {
         if (_firstMeasId !== null) { _removeMeasurement(_firstMeasId); _firstMeasId = null; }
         const meas = _addMeasurement(_firstSelection, snap);
@@ -1401,7 +1512,6 @@ function _handleInteraction(clientX, clientY) {
         if (_confirmResetTimer) clearTimeout(_confirmResetTimer);
         _confirmResetTimer = setTimeout(() => {
             _confirmResetTimer = null;
-            // _firstMarker может быть обнулён в destroy за время таймера
             _firstSelection = null;
             if (_firstMarker) _firstMarker.visible = false;
             _firstMeasId = null;
@@ -1409,10 +1519,6 @@ function _handleInteraction(clientX, clientY) {
         }, 800);
     }
 }
-
-// ============================================================
-// Анимационный цикл — пульс маркеров (rAF живёт только пока виден маркер)
-// ============================================================
 
 /** Событийный рендер слоя CSS2D-меток (пересчёт позиций DOM-элементов). */
 function _renderLabels() {
@@ -1423,8 +1529,7 @@ function _renderLabels() {
 
 function _startPulseLoop() {
     if (_animFrameId !== null) return;
-    // Фоновый режим: маркеры невидимы для пользователя — пульс не нужен.
-    // При возобновлении плагина цикл перезапустит следующий mousemove/клик.
+    // В фоновом режиме пульс не нужен — возобновляется при следующем mousemove/клике.
     if (PluginManager.isPluginPaused('measure')) return;
     _animFrameId = requestAnimationFrame(_pulseLoop);
 }
@@ -1443,19 +1548,13 @@ function _pulseLoop() {
         const s = 1 + Math.sin(_animT * 4) * 0.1;
         _hoverMarker.scale.set(s, s, s);
     }
-    // Пульс меняет масштаб 3D-маркеров (рисует основной рендер вьювера); метки синхронизируем на время видимости.
     _renderLabels();
-    // Цикл останавливается сам, когда оба маркера скрыты
     if ((_firstMarker && _firstMarker.visible) || (_hoverMarker && _hoverMarker.visible)) {
         _animFrameId = requestAnimationFrame(_pulseLoop);
     } else {
         _animFrameId = null;
     }
 }
-
-// ============================================================
-// Утилиты init/destroy
-// ============================================================
 
 function _createMarker(color, scale) {
     scale = scale || 1;
@@ -1485,21 +1584,11 @@ function _showRipple(x, y) {
     setTimeout(() => r.remove(), 500);
 }
 
-// ============================================================
-// РЕГИСТРАЦИЯ ПЛАГИНА
-// ============================================================
-
 PluginManager.register({
     id: 'measure',
     name: 'Измерение',
     icon: 'square_foot',
-    // module — не указывается; привязку к модулю задаёт администратор
-    // в js/plugins/registry.js через PluginManager.bindModules().
 
-    /**
-     * Кнопка плагина показывается только если модель уже загружена.
-     * PluginManager переоценивает condition при каждом событии modelLoaded.
-     */
     condition: (api) => !!(api && api.model && api.scene),
 
     init(api) {
@@ -1512,11 +1601,9 @@ PluginManager.register({
         _model = api.model;
         _container = document.getElementById('model-container');
 
-        // Собираем меши
         _collectMeshes();
         _model.updateMatrixWorld(true);
 
-        // Группы
         _helpersGroup = new THREE.Group();
         _helpersGroup.name = 'measure-helpers';
         _scene.add(_helpersGroup);
@@ -1525,7 +1612,6 @@ PluginManager.register({
         _measurementsGroup.name = 'measurements';
         _scene.add(_measurementsGroup);
 
-        // Маркеры
         _firstMarker = _createMarker(CONFIG.vertexColor);
         _firstMarker.visible = false;
         _helpersGroup.add(_firstMarker);
@@ -1534,7 +1620,6 @@ PluginManager.register({
         _hoverMarker.visible = false;
         _helpersGroup.add(_hoverMarker);
 
-        // CSS2DRenderer
         _labelRenderer = new CSS2DRenderer();
         _labelRenderer.setSize(_container.clientWidth, _container.clientHeight);
         _labelRenderer.domElement.style.position = 'absolute';
@@ -1545,7 +1630,6 @@ PluginManager.register({
         _labelRenderer.domElement.style.zIndex = '50';
         _container.appendChild(_labelRenderer.domElement);
 
-        // Сброс состояния
         _selectedMeasId = null;
         _measureIdCounter = 0;
         _measurements = [];
@@ -1556,9 +1640,10 @@ PluginManager.register({
         _edgeHighlight = null;
         _faceHighlight = null;
         _cameraMoved = false;
+        _sectionFillHidden = false;
         _clearCache();
 
-        // Определение движения камеры (отличие клика от орбиты)
+        // Определение движения камеры (отличие клика от орбиты).
         _controlsStartHandler = () => {
             _initialCamPos = _camera.position.clone();
             _initialCamTarget = _controls.target.clone();
@@ -1571,27 +1656,25 @@ PluginManager.register({
                 _cameraMoveTimer = setTimeout(() => { _cameraMoved = false; }, 300);
             }
         };
-        // controls может отсутствовать (condition это не проверяет) — не падаем
+        // controls может отсутствовать — не падаем.
         if (_controls) {
             _controls.addEventListener('start', _controlsStartHandler);
             _controls.addEventListener('change', _controlsChangeHandler);
-            // Событийный рендер меток при движении камеры (отдельный слушатель: _controlsChangeHandler выходит до первого 'start')
             _controlsRenderHandler = () => _renderLabels();
             _controls.addEventListener('change', _controlsRenderHandler);
         }
 
-        // События на canvas
         const canvas = _renderer.domElement;
 
         const mousemoveHandler = ev => {
-            // Троттлинг ~30 fps: raycast + closest-point по всем граням на каждом mousemove
+            // Троттлинг ~30 fps.
             const now = performance.now();
             if (now - _lastMouseMoveT < 33) return;
             _lastMouseMoveT = now;
             const snap = _findSnapElement(ev);
             if (snap) {
                 _hoverMarker.visible = true;
-                _startPulseLoop(); // hover-маркер появился — запускаем пульс
+                _startPulseLoop();
                 _hoverMarker.position.copy(snap.point);
                 _highlight(snap);
                 canvas.style.cursor = 'crosshair';
@@ -1604,7 +1687,7 @@ PluginManager.register({
         canvas.addEventListener('mousemove', mousemoveHandler);
         _boundEventHandlers.push({ el: canvas, type: 'mousemove', handler: mousemoveHandler });
 
-        // Уход курсора за пределы canvas — сбрасываем hover/курсор, иначе висят до следующего mousemove
+        // Уход курсора за пределы canvas — сбрасываем hover/курсор.
         const mouseleaveHandler = () => {
             _hoverMarker.visible = false;
             _clearHL();
@@ -1659,12 +1742,12 @@ PluginManager.register({
         canvas.addEventListener('touchend', touchendHandler, { passive: false });
         _boundEventHandlers.push({ el: canvas, type: 'touchend', handler: touchendHandler, opts: { passive: false } });
 
-        // ResizeObserver ловит ресайз контейнера при фуллскрине/перетаскивании панели (а не только window.resize)
+        // ResizeObserver ловит ресайз контейнера при фуллскрине/перетаскивании панели.
         _resizeHandler = () => {
             if (_labelRenderer && _container) {
                 _labelRenderer.setSize(_container.clientWidth, _container.clientHeight);
             }
-            _renderLabels(); // после ресайза позиции меток пересчитываются сразу
+            _renderLabels();
         };
         window.addEventListener('resize', _resizeHandler);
         if (typeof ResizeObserver !== 'undefined' && _container) {
@@ -1672,16 +1755,16 @@ PluginManager.register({
             _resizeObserver.observe(_container);
         }
 
-        // Пульс стартует только при появлении маркера; рендер меток — событийный (change/мутации/ресайз).
-        // Кэш геометрии в мировых координатах инвалидируется при model-transformed и modelLoaded.
         _modelLoadedHandler = () => {
             _clearCache();
+            // Новая модель — грани сечения пересозданы, состояние сбрасываем.
+            _sectionFillHidden = false;
+            _updateSectionFillButton();
             const freshModel = PluginManager.getModuleAPI('3d-viewer')?.model;
             if (freshModel && freshModel !== _model) {
                 _model = freshModel;
                 _collectMeshes();
                 _model.updateMatrixWorld(true);
-                // Измерения и выделения старой модели теряют смысл
                 for (const m of [..._measurements]) {
                     if (m.group) { _measurementsGroup?.remove(m.group); _disposeGroup(m.group); }
                 }
@@ -1693,11 +1776,10 @@ PluginManager.register({
                 if (_hoverMarker) _hoverMarker.visible = false;
                 _clearHL();
                 _updateToolbarState();
-                _renderLabels(); // слои меток после смены модели — синхронизируем
+                _renderLabels();
             }
         };
         window.addEventListener('modelLoaded', _modelLoadedHandler);
-        // Трансформация модели (гизмо) двигает и метки — рендерим событийно
         _modelTransformedHandler = () => { _clearCache(); _renderLabels(); };
         window.addEventListener('model-transformed', _modelTransformedHandler);
 
@@ -1708,18 +1790,21 @@ PluginManager.register({
     },
 
     destroy() {
-        // Гасим таймеры до сброса ссылок — иначе колбэки разыменовывают _firstMarker/_renderer после destroy → TypeError
+        // Гасим таймеры до сброса ссылок.
         if (_confirmResetTimer) { clearTimeout(_confirmResetTimer); _confirmResetTimer = null; }
         if (_clickTimeout) { clearTimeout(_clickTimeout); _clickTimeout = null; }
         if (_cameraMoveTimer) { clearTimeout(_cameraMoveTimer); _cameraMoveTimer = null; }
 
-        // Останавливаем анимацию
         if (_animFrameId) { cancelAnimationFrame(_animFrameId); _animFrameId = null; }
 
-        // Курсор мог остаться crosshair — сбрасываем до обнуления _renderer
+        // Полное выключение: возвращаем грани (иначе застрянут скрытыми без
+        // кнопки, которая их вернёт); подсветка рёбер уйдёт с группами размеров.
+        if (_sectionFillHidden) _setSectionFillVisible(true);
+        _sectionFillHidden = false;
+        _hiddenFillMeshes = [];
+
         if (_renderer?.domElement) _renderer.domElement.style.cursor = '';
 
-        // Удаляем все измерения
         for (const m of [..._measurements]) {
             if (m.group) { _measurementsGroup?.remove(m.group); _disposeGroup(m.group); }
         }
@@ -1728,7 +1813,6 @@ PluginManager.register({
         _firstSelection = null;
         _firstMeasId = null;
 
-        // Удаляем группы из сцены
         if (_helpersGroup) {
             _scene?.remove(_helpersGroup);
             _helpersGroup.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); });
@@ -1739,23 +1823,19 @@ PluginManager.register({
             _measurementsGroup = null;
         }
 
-        // Удаляем CSS2DRenderer
         if (_labelRenderer?.domElement?.parentNode) {
             _labelRenderer.domElement.parentNode.removeChild(_labelRenderer.domElement);
         }
         _labelRenderer = null;
 
-        // Снимаем события с canvas
         for (const { el, type, handler, opts } of _boundEventHandlers) {
             el.removeEventListener(type, handler, opts);
         }
         _boundEventHandlers = [];
 
-        // Resize
         if (_resizeHandler) { window.removeEventListener('resize', _resizeHandler); _resizeHandler = null; }
         if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null; }
 
-        // Инвалидация кэшей при трансформации/перезагрузке модели
         if (_modelLoadedHandler) {
             window.removeEventListener('modelLoaded', _modelLoadedHandler);
             _modelLoadedHandler = null;
@@ -1765,7 +1845,6 @@ PluginManager.register({
             _modelTransformedHandler = null;
         }
 
-        // Контролсы
         if (_controlsStartHandler) _controls?.removeEventListener('start', _controlsStartHandler);
         if (_controlsChangeHandler) _controls?.removeEventListener('change', _controlsChangeHandler);
         if (_controlsRenderHandler) _controls?.removeEventListener('change', _controlsRenderHandler);
@@ -1773,10 +1852,8 @@ PluginManager.register({
         _controlsChangeHandler = null;
         _controlsRenderHandler = null;
 
-        // Кэши
         _clearCache();
 
-        // Сброс
         _camera = null; _renderer = null; _controls = null; _scene = null; _model = null;
         _container = null; _toolbarEl = null; _meshObjects = [];
         _firstMarker = null; _hoverMarker = null;
@@ -1798,6 +1875,12 @@ PluginManager.register({
                     </button>
                     <button class="measure-btn plugin-pill-btn active" data-mode="face" title="Грань">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="4" y="4" width="16" height="16" rx="1.5"/></svg>
+                    </button>
+                </div>
+                <div class="measure-divider plugin-pill-divider"></div>
+                <div class="measure-group plugin-pill-group">
+                    <button class="measure-btn plugin-pill-btn" data-action="section-fill" title="Грани и рёбра сечения">
+                        ${SECTION_FILL_EYE_OPEN_SVG}
                     </button>
                 </div>
                 <div class="measure-divider plugin-pill-divider"></div>
@@ -1827,7 +1910,6 @@ PluginManager.register({
         onMount(toolbar) {
             _toolbarEl = toolbar;
 
-            // Кнопки привязки
             const modeBtns = toolbar.querySelectorAll('.measure-btn[data-mode]');
             modeBtns.forEach(btn => {
                 const handler = () => {
@@ -1842,7 +1924,6 @@ PluginManager.register({
                 _boundEventHandlers.push({ el: btn, type: 'click', handler });
             });
 
-            // Удалить
             const deleteBtn = toolbar.querySelector('[data-action="delete"]');
             if (deleteBtn) {
                 const handler = () => {
@@ -1861,7 +1942,6 @@ PluginManager.register({
                 _boundEventHandlers.push({ el: deleteBtn, type: 'click', handler });
             }
 
-            // Подтвердить
             const confirmBtn = toolbar.querySelector('[data-action="confirm"]');
             if (confirmBtn) {
                 const handler = () => {
@@ -1876,7 +1956,6 @@ PluginManager.register({
                 _boundEventHandlers.push({ el: confirmBtn, type: 'click', handler });
             }
 
-            // Положение
             const positionBtn = toolbar.querySelector('[data-action="position"]');
             if (positionBtn) {
                 const handler = () => {
@@ -1891,11 +1970,35 @@ PluginManager.register({
                 _boundEventHandlers.push({ el: positionBtn, type: 'click', handler });
             }
 
+            // Переключатель граней сечения; stopPropagation — чтобы клик не
+            // дошёл до обработчика «клик мимо таблицы» спецификации.
+            const sectionFillBtn = toolbar.querySelector('[data-action="section-fill"]');
+            if (sectionFillBtn) {
+                const handler = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    _toggleSectionFill();
+                };
+                sectionFillBtn.addEventListener('click', handler);
+                _boundEventHandlers.push({ el: sectionFillBtn, type: 'click', handler });
+            }
+
             _updateToolbarState();
+            _updateSectionFillButton(); // синхронизация с реальным состоянием сцены
         },
 
         onUnmount() {
             _toolbarEl = null;
+        },
+
+        // В фон уходим с сохранением применённого скрытия — оно глобальное
+        // (как размеры, остающиеся видимыми в других плагинах).
+        onPause() {},
+
+        onResume() {
+            // В фоне сечение могли включить/сдвинуть — применяем скрытие заново.
+            if (_sectionFillHidden) _setSectionFillVisible(false);
+            _updateSectionFillButton();
         }
     }
 });

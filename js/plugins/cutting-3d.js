@@ -1,29 +1,13 @@
 /**
- * Плагин: Сечение модели (3D) — Drag-версия (patched)
+ * Плагин: Сечение модели (3D).
  *
- * Секущая плоскость управляется прямым перетаскиванием на модели,
- * а не ползунком. При выборе оси (X/Y/Z) появляется полупрозрачная
- * цветная плоскость, которую можно двигать мышкой или пальцем.
- *
- * Сохранена вся логика stencil-сечений и cap-плоскостей из оригинала.
- * Изменён только UI и способ управления позицией сечения.
- *
- * ПАТЧИ (отмечены [FIX-XXX-N] в коде):
- *   [FIX-PERF-1] Share stencil-материалы на ось (было N клонов на пару)
- *   [FIX-PERF-2] needsUpdate=true только при смене количества plane'ов
- *   [FIX-PERF-3] Share клонов материалов модели (было 1012 клонов, теперь 1)
- *   [FIX-PERF-4] Убрать dithering:true из клонов (лишний shader variant)
- *   [FIX-ART-1]  polygonOffset на cap-материале против z-fighting
- *   [FIX-ART-2]  up=(0,0,1) для Y-оси против degenerate lookAt
- *   [FIX-ART-3]  Сдвиг cap вдоль нормали на ε (страховка от z-fighting)
+ * Секущая плоскость управляется прямым перетаскиванием на модели.
+ * При выборе оси (X/Y/Z) появляется полупрозрачная цветная плоскость,
+ * которую можно двигать мышкой или пальцем.
  */
 
 import * as THREE from 'three';
 import PluginManager from '../plugin-system.js';
-
-// ============================================================
-// КОНСТАНТЫ
-// ============================================================
 
 const AXIS_COLORS = {
     x: 0xff4444,
@@ -36,10 +20,6 @@ const PLANE_HOVER_OPACITY = 0.22;
 const PLANE_DRAG_OPACITY = 0.22;
 const PLANE_EDGE_OPACITY = 0.55;
 
-// ============================================================
-// СОСТОЯНИЕ СЕЧЕНИЯ (stencil, cap, clipping)
-// ============================================================
-
 const cutRefs = { scene: null, model: null, renderer: null, camera: null, controls: null };
 const cutObjects = {
     stencilGroups: [], capPlanes: [], capPlaneGroups: [],
@@ -47,29 +27,18 @@ const cutObjects = {
 };
 const materialCache = new Map();
 
-// [FIX-PERF-3] Кэш «исходный материал модели → клон для сечения».
-// Без него m.clone() вызывался бы на каждый узел модели — для ангара
-// с ~1000 узлов это ~1000 клонов, даже если все они шарят один исходник
-// (Default). С кэшем клон создаётся один раз на уникальный исходный
-// материал — Three.js снова может батчить draw call'ы.
+// Кэш «исходный материал модели → клон для сечения» — клон создаётся один раз
+// на уникальный исходный материал, что сохраняет батчинг draw call'ов Three.js.
 const _clonedModelMaterials = new Map();
 
-// Связь «оригинальный меш модели → его stencil-меши (back+front по каждой оси)».
-// Нужна для синхронизации видимости: если деталь спрятали (mesh.visible=false
-// или скрыт её предок в дереве сборки), соответствующие stencil-меши тоже
-// прячутся → cap-плоскость больше не рисает «заглушку» в этом месте.
-// Map (а не WeakMap): реестр живёт ровно одну сессию сечения и ПОЛНОСТЬЮ
-// сбрасывается в disableCutting. WeakMap очистить нельзя — из-за этого при
-// повторном включении сечения registeredMeshes оставался пустым и синхронизация
-// cap-заглушек умирала навсегда (критичный баг C1).
+// Связь «оригинальный меш → его stencil-меши» для синхронизации видимости.
+// Map (не WeakMap) — реестр живёт одну сессию сечения и полностью сбрасывается
+// в disableCutting, иначе при повторном включении синхронизация ломается.
 const meshToStencilMeshes = new Map();
 
-// Список мешей, у которых есть зарегистрированные stencil-меши.
-// Используется для быстрого обхода в syncPartVisibility без полного traverse модели.
+// Меши с зарегистрированными stencil-мешами — быстрый обход без traverse модели.
 const registeredMeshes = new Set();
 
-// E4: отписка от Store вместо RAF-идентификатора. Видимость деталей меняется
-// только событийно (дерево спецификации), вечный 60-кадровый поллинг удалён.
 let _unsubscribeVisibility = null;
 
 const capOptions = {
@@ -86,10 +55,6 @@ let _store = null;
 let _boundUIHandlers = [];
 
 const enabledAxes = { x: false, y: false, z: false };
-
-// ============================================================
-// DRAG STATE
-// ============================================================
 
 const drag = {
     isDragging: false,
@@ -113,10 +78,6 @@ const drag = {
     _ptrCancel: null,
     _touchPrevent: null,
 };
-
-// ============================================================
-// ЛОГИКА СЕЧЕНИЯ — stencil, cap, clipping
-// ============================================================
 
 function syncCapOptionsFromStore() {
     const s = _store?.getState('ui.settings');
@@ -159,12 +120,7 @@ function getModelBaseColor() {
 
 function createPlaneStencilGroup(geometry, plane, renderOrder) {
     const group = new THREE.Group();
-    // [FIX-PERF-1] Раньше baseMaterial.clone() вызывался на КАЖДУЮ пару
-    // stencil-мешей → для ангара с ~1000 узлов это ~6000 отдельных
-    // MeshBasicMaterial в сцене. Теперь кэшируем ГОТОВЫЕ back+front
-    // материалы на ось (3 оси × 2 стороны = 6 материалов всего).
-    // clippingPlanes — ссылка, обновляем её на актуальный plane (он
-    // один на ось, значит общий для всех пар).
+    // Кэшируем готовые back+front материалы на ось (3 оси × 2 стороны = 6 всего).
     const cacheKey = `stencil-pair-${renderOrder}`;
     let cached = materialCache.get(cacheKey);
     if (!cached) {
@@ -184,16 +140,14 @@ function createPlaneStencilGroup(geometry, plane, renderOrder) {
             stencilZFail: THREE.DecrementWrapStencilOp,
             stencilZPass: THREE.DecrementWrapStencilOp
         });
-        // [FIX-PERF-1] Помечаем shared-материалы флагом, чтобы disposeGroup
-        // не диспозил их 6072 раза (по разу на каждый stencil-меш). Реальное
-        // dispose делаем централизованно в disableCutting.
+        // Помечаем shared-материалы флагом — disposeGroup пропускает их;
+        // реальный dispose делаем централизованно в disableCutting.
         backMaterial.userData.__sharedStencil = true;
         frontMaterial.userData.__sharedStencil = true;
         cached = { back: backMaterial, front: frontMaterial, shared: true };
         materialCache.set(cacheKey, cached);
     }
-    // Plane мог быть переопределён (инверсия оси) — обновляем ссылку
-    // в обоих shared-материалах. Это копия массива из 1 элемента.
+    // Plane мог быть переопределён (инверсия оси) — обновляем ссылку.
     cached.back.clippingPlanes = [plane];
     cached.front.clippingPlanes = [plane];
 
@@ -206,14 +160,8 @@ function createPlaneStencilGroup(geometry, plane, renderOrder) {
 
 function createCapPlane(plane, renderOrder, otherPlanes, axis) {
     const capColor = getModelBaseColor();
-    // [FIX-ART-1] polygonOffset тащит cap-плоскость к камере — иначе
-    // z-fighting с ребром модели на той же глубине axisValue,
-    // из-за чего заглушка выглядит «утопленной во внутрь» (видна
-    // частично, местами перекрыта краем геометрии). Это классика
-    // stencil-сечений, без polygonOffset кап неизбежно мерцает.
-    // [FIX-PERF-4] dithering:true убран — материал непрозрачный,
-    // dithering только порождал лишний shader variant без визуального
-    // эффекта.
+    // polygonOffset тащит cap-плоскость к камере — иначе z-fighting с ребром
+    // модели на той же глубине axisValue.
     const material = new THREE.MeshStandardMaterial({
         color: capColor, metalness: capOptions.metalness, roughness: capOptions.roughness,
         clippingPlanes: otherPlanes, stencilWrite: true, stencilRef: 0,
@@ -237,12 +185,8 @@ function updateCapPlanePosition(capPlane, plane, axis) {
     const cy = (bounds.y.min + bounds.y.max) / 2;
     const cz = (bounds.z.min + bounds.z.max) / 2;
 
-    // [FIX-ART-3] Небольшой сдвиг cap вдоль нормали разреза в сторону
-    // сохранённой части модели — страховка от z-fighting сверх polygonOffset.
-    // Берём долю от размера модели по этой оси (1e-4 ≈ 0.6 мм для ангара
-    // 60 м), чтобы не было визуально заметно, но хватало для depth buffer
-    // на дальних дистанциях. Нормаль указывает отсекаемую сторону, значит
-    // сдвиг в направлении -normal = в сторону сохранённой геометрии.
+    // Небольшой сдвиг cap вдоль нормали в сторону сохранённой части модели —
+    // страховка от z-fighting сверх polygonOffset.
     const axisSpan = Math.max(bounds[axis].max - bounds[axis].min, 1e-6);
     const epsilon = Math.max(axisSpan * 1e-4, 1e-3);
     const offset = -epsilon; // в сторону сохранённой части
@@ -255,13 +199,8 @@ function updateCapPlanePosition(capPlane, plane, axis) {
         capPlane.position.set(cx, cy, axisValue + offset * plane.normal.z);
     }
 
-    // [FIX-ART-2] Для оси Y (нормаль ±Y) lookAt с дефолтным up=(0,1,0)
-    // даёт degenerate-матрицу: view direction = (0, ±1, 0) параллелен up →
-    // cross product = 0 → rotation NaN/zero. Это причина артефактов на
-    // вертикальных разрезах балок: кап мог быть ориентирован случайно
-    // или вообще не отрисовываться. Меняем up на (0,0,1) — не параллелен
-    // Y-нормали. Для X и Z дефолтный up работает, но явно фиксируем для
-    // предсказуемости.
+    // Для оси Y lookAt с дефолтным up=(0,1,0) даёт degenerate-матрицу —
+    // меняем up на (0,0,1).
     if (axis === 'y') {
         capPlane.up.set(0, 0, 1);
     } else {
@@ -280,10 +219,7 @@ function disposeGroup(group) {
         if (child.material) {
             (Array.isArray(child.material) ? child.material : [child.material]).forEach(m => {
                 if (!m) return;
-                // [FIX-PERF-1] shared stencil-материалы диспозим отдельно —
-                // в disableCutting через materialCache.forEach, чтобы не
-                // вызывать dispose() 6072 раза на 6 материалов (это безопасно
-                // для Three.js — dispose() идемпотентен, но лишняя работа).
+                // shared stencil-материалы диспозим централизованно в disableCutting.
                 if (m.userData?.__sharedStencil) return;
                 if (typeof m.dispose === 'function') m.dispose();
             });
@@ -339,10 +275,8 @@ function enableCutting() {
 }
 
 /**
- * Возврат материалов по контракту владения (см. applyClippingPlanes):
- * снимаем ТОЛЬКО собственную запись в стеке подмен. Клоны НЕ диспозим
- * здесь — они в _clonedModelMaterials и могут шариться между узлами,
-// диспозим всё скопом в disableCutting().
+ * Снимаем собственную запись в стеке подмен материалов. Клоны не диспозим —
+ * они шарятся между узлами и очищаются централизованно в disableCutting().
  */
 function releaseClippingMaterials() {
     cutRefs.model.traverse(node => {
@@ -356,8 +290,7 @@ function releaseClippingMaterials() {
         if (stack.length === 0) delete node.userData.materialOwners;
         if (isTop) {
             node.material = saved;
-            // [FIX-PERF-3] Не диспозим клон здесь — он может шариться
-            // между узлами. Полная очистка — в disableCutting.
+            // Клон не диспозим здесь — он может шариться между узлами.
         }
     });
 }
@@ -376,7 +309,7 @@ function disableCutting() {
     enabledAxes.z = false;
     _store.setState('cutting3d.activeAxis', null);
 
-    // [FIX-PERF-1] Диспозим shared stencil-материалы и чистим materialCache.
+    // Диспозим shared stencil-материалы и чистим materialCache.
     materialCache.forEach(item => {
         if (item && typeof item === 'object' && item.shared) {
             if (item.back?.dispose) item.back.dispose();
@@ -387,20 +320,16 @@ function disableCutting() {
     });
     materialCache.clear();
 
-    // [FIX-PERF-3] Диспозим клонированные материалы модели и чистим кэш.
+    // Диспозим клонированные материалы модели и чистим кэш.
     _clonedModelMaterials.forEach(m => {
         if (m && typeof m.dispose === 'function') m.dispose();
     });
     _clonedModelMaterials.clear();
 
-    // [FIX-PERF-2] Сбрасываем счётчик количества plane'ов — иначе при
-    // следующем enableCutting needsUpdate не сработает на первый apply.
+    // Сбрасываем счётчик количества plane'ов — иначе при следующем
+    // enableCutting needsUpdate не сработает на первый apply.
     applyClippingPlanes._lastPlaneCount = -1;
 }
-
-// ------------------------------------------------------------
-// Синхронизация видимости
-// ------------------------------------------------------------
 
 function isEffectivelyVisible(node) {
     let cur = node;
@@ -425,19 +354,15 @@ function syncPartVisibility() {
             }
         }
     });
-    // Пробуждаем рендер-цикл вьювера: cap-плоскость перерисуется сразу,
-    // а не на следующем idle-кадре (1 fps в простое — на большой модели
-    // видна задержка до 1 секунды между скрытием детали и пропаданием заглушки).
+    // Пробуждаем рендер-цикл вьювера, чтобы cap перерисовался сразу.
     if (changed) window.dispatchEvent(new Event('viewer-activity'));
 }
 
 function startVisibilitySync() {
     if (_unsubscribeVisibility !== null || !_store) return;
-    // Слушаем window-событие model-visibility-changed — оно диспатчится
-    // ПОСЛЕ фактического изменения visible у мешей (см. _visibilityChanged
-    // в specification.js / cutting.js / montage.js). Store-событие
-    // 'specification.lastSelectedPart' стреляет ДО скрытия мешей → гонка
-    // и «пробки» от скрытых деталей на cap-плоскости.
+    // Слушаем window-событие model-visibility-changed — оно стреляет ПОСЛЕ
+    // фактического изменения visible у мешей. Store-событие стреляет ДО
+    // скрытия → была гонка и «пробки» от скрытых деталей на cap-плоскости.
     window.addEventListener('model-visibility-changed', syncPartVisibility);
     _unsubscribeVisibility = () => {
         window.removeEventListener('model-visibility-changed', syncPartVisibility);
@@ -473,12 +398,9 @@ function applyClippingPlanes() {
         activePlanes.push(plane);
     });
 
-    // [FIX-PERF-2] needsUpdate:true нужен ТОЛЬКО когда изменилось КОЛИЧЕСТВО
-    // активных плоскостей — это перекомпилирует шейдер (define
-    // NUM_CLIPPING_PLANES в WebGLProgram). Сами значения normal/constant —
-    // это uniform'ы, они обновляются без needsUpdate. Раньше needsUpdate
-    // дёргался на каждый pointermove → лишние проверки program cache в
-    // Three.js на 1000+ материалах в кадре.
+    // needsUpdate:true нужен только при смене количества плоскостей —
+    // это перекомпилирует шейдер. Значения normal/constant — uniform'ы,
+    // обновляются без needsUpdate.
     const prevPlaneCount = applyClippingPlanes._lastPlaneCount;
     const planeCountChanged = prevPlaneCount !== activePlanes.length;
     applyClippingPlanes._lastPlaneCount = activePlanes.length;
@@ -490,9 +412,8 @@ function applyClippingPlanes() {
         const oursIdx = stack.findIndex(e => e.owner === 'cutting-3d');
         if (oursIdx === -1) {
             if (stack.length > 0) return; // материал сейчас подменён другим плагином
-            // [FIX-PERF-3] Клонируем материал один раз на уникальный
-            // исходный материал, шарим клон между всеми узлами, которые
-            // исходно шарили источник. Восстанавливает батчинг Three.js.
+            // Клонируем материал один раз на уникальный исходный материал,
+            // шарим клон между всеми узлами — восстанавливает батчинг Three.js.
             const cloneMaterial = m => {
                 if (!m) return m;
                 let n = _clonedModelMaterials.get(m);
@@ -501,8 +422,6 @@ function applyClippingPlanes() {
                     n.clippingPlanes = [];
                     n.clipShadows = true;
                     n.shadowSide = THREE.DoubleSide;
-                    // [FIX-PERF-4] dithering:true на непрозрачном материале
-                    // только порождал лишний shader variant — убираем.
                     _clonedModelMaterials.set(m, n);
                 }
                 return n;
@@ -515,7 +434,6 @@ function applyClippingPlanes() {
             if (m) {
                 m.clippingPlanes = activePlanes.slice();
                 m.clipShadows = true;
-                // [FIX-PERF-2] только при смене количества plane'ов
                 if (planeCountChanged) m.needsUpdate = true;
             }
         });
@@ -533,16 +451,11 @@ function applyClippingPlanes() {
         if (isOn) {
             updateCapPlanePosition(capPlane, cutObjects.clippingPlanes[axis], axis);
             capPlane.material.clippingPlanes = activePlanes.filter(p => p !== cutObjects.clippingPlanes[axis]);
-            // [FIX-PERF-2]
             if (planeCountChanged) capPlane.material.needsUpdate = true;
         }
     });
 }
 applyClippingPlanes._lastPlaneCount = -1;
-
-// ============================================================
-// VISIBLE PLANE — полупрозрачная плоскость на модели
-// ============================================================
 
 function createVisiblePlane(axis) {
     removeVisiblePlane();
@@ -632,10 +545,6 @@ function togglePlaneVisibility() {
     return drag.isVisible;
 }
 
-// ============================================================
-// DRAG INTERACTION — перетаскивание плоскости мышкой/пальцем
-// ============================================================
-
 function _getPointerCoords(event) {
     const rect = cutRefs.renderer.domElement.getBoundingClientRect();
     drag.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -723,6 +632,14 @@ function handlePointerMove(event) {
             _cancelDrag();
             _setControlsForDrag(true);
         }
+        return;
+    }
+
+    // Плагин ушёл в фон посреди перетаскивания (перехват window-pointermove
+    // не снимается паузой) — гасим drag, чтобы плоскость не таскалась «из фона».
+    if (drag.isDragging && PluginManager.isPluginPaused('cutting-3d')) {
+        _cancelDrag();
+        _setControlsForDrag(true);
         return;
     }
 
@@ -820,17 +737,9 @@ function cleanupDragListeners() {
     _setControlsForDrag(true);
 }
 
-// ============================================================
-// SVG ИКОНКИ (inline — глаз/глаз закрыт)
-// ============================================================
-
 const EYE_OPEN_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
 const EYE_CLOSED_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
-
-// ============================================================
-// UI HELPERS
-// ============================================================
 
 function updateAxisUI(axisBtns, visibilityBtn) {
     const activeAxis = _store.getState('cutting3d.activeAxis');
@@ -872,28 +781,22 @@ function resetCutting(axisBtns, visibilityBtn) {
     applyClippingPlanes();
 }
 
-// ============================================================
-// РЕГИСТРАЦИЯ ПЛАГИНА
-// ============================================================
-
 PluginManager.register({
     id: 'cutting-3d',
     name: 'Сечение',
     icon: 'slice-fill',
-    // module — не указывается; привязку к модулю задаёт администратор
-    // в js/plugins/registry.js через PluginManager.bindModules().
 
     condition: (api) => !!(api && api.model && api.scene),
 
     init(api) {
+        if (!api.scene || !api.model) return () => {};
+
         _store = api.store;
         cutRefs.scene = api.scene;
         cutRefs.model = api.model;
         cutRefs.renderer = api.renderer;
         cutRefs.camera = api.camera;
         cutRefs.controls = api.controls;
-
-        if (!api.scene || !api.model) return;
 
         if (api.renderer) {
             api.renderer.localClippingEnabled = true;
